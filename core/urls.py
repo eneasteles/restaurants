@@ -7,7 +7,7 @@ urlpatterns = [
     # Admin com logout customizado
     
     
-    path('admin/', admin.site.urls),
+    path('', admin.site.urls),
     
     # Sistema de autenticação completo
 

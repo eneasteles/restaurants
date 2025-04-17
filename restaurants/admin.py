@@ -24,6 +24,14 @@ class RestaurantAdmin(admin.ModelAdmin):
     search_fields = ('name', 'owner__username', 'phone')
     prepopulated_fields = {'slug': ('name',)}
 
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # Superusuário vê tudo
+        if request.user.is_superuser:
+            return qs
+        # Dono vê só suas mesas
+        return qs.filter(restaurante__owner=request.user)
+
 @admin.register(Table)
 class TableAdmin(admin.ModelAdmin):
     list_display = ('number', 'restaurant', 'capacity', 'is_occupied')
@@ -35,9 +43,23 @@ class CategoryAdmin(admin.ModelAdmin):
     list_display = ('name', 'restaurant', 'order')
     list_filter = ('restaurant',)
     ordering = ('restaurant', 'order')
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # Superusuário vê tudo
+        if request.user.is_superuser:
+            return qs
+        # Dono vê só suas mesas
+        return qs.filter(restaurant__owner=request.user)
 
 @admin.register(MenuItem)
 class MenuItemAdmin(admin.ModelAdmin):
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # Superusuário vê tudo
+        if request.user.is_superuser:
+            return qs
+        # Dono vê só suas mesas
+        return qs.filter(restaurant__owner=request.user)
     list_display = ('name', 'category', 'price', 'is_available')
     list_filter = ('restaurant', 'category', 'is_available')
     search_fields = ('name', 'description')
@@ -45,6 +67,13 @@ class MenuItemAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # Superusuário vê tudo
+        if request.user.is_superuser:
+            return qs
+        # Dono vê só suas mesas
+        return qs.filter(restaurant__owner=request.user)
     list_display = ('id', 'restaurant', 'table', 'status', 'created_at', 'total_display')
     readonly_fields = ('total_display',)
     
@@ -54,15 +83,23 @@ class OrderAdmin(admin.ModelAdmin):
     total_display.short_description = ('Total')
 
 @admin.register(Customer)
-class CustomerAdmin(admin.ModelAdmin):
+class CustomerAdmin(admin.ModelAdmin):    
     list_display = ('name', 'restaurant', 'phone', 'email')
     search_fields = ('name', 'phone', 'email')
     list_filter = ('restaurant',)
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # Superusuário vê tudo
+        if request.user.is_superuser:
+            return qs
+        # Dono vê só suas mesas
+        return qs.filter(restaurant__owner=request.user)
 
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
     list_display = ('order', 'menu_item', 'quantity', 'price', 'subtotal_display')
     list_filter = ('order__restaurant',)
+    
     
     def subtotal_display(self, obj):
         return f"R$ {obj.subtotal():.2f}"

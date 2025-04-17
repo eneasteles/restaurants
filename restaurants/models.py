@@ -5,7 +5,7 @@ from django.core.validators import MinValueValidator
 
 User = get_user_model()
 
-class Restaurant(models.Model):
+class Restaurant(models.Model):    
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='restaurants')
     name = models.CharField(_('Nome'), max_length=100)
     slug = models.SlugField(_('Slug'), unique=True)
@@ -17,6 +17,7 @@ class Restaurant(models.Model):
     created_at = models.DateTimeField(_('Criado em'), auto_now_add=True)
     updated_at = models.DateTimeField(_('Atualizado em'), auto_now=True)
 
+    
     class Meta:
         verbose_name = _('Restaurante')
         verbose_name_plural = _('Restaurantes')
@@ -54,6 +55,8 @@ class Category(models.Model):
         verbose_name_plural = _('Categorias')
         ordering = ['order', 'name']
 
+    
+    
     def __str__(self):
         return self.name
 
