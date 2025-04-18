@@ -30,7 +30,7 @@ class RestaurantAdmin(admin.ModelAdmin):
         if request.user.is_superuser:
             return qs
         # Dono vê só suas mesas
-        return qs.filter(restaurante__owner=request.user)
+        return qs.filter(owner=request.user)
 
 @admin.register(Table)
 class TableAdmin(admin.ModelAdmin):
@@ -82,6 +82,8 @@ class OrderAdmin(admin.ModelAdmin):
         return f"R$ {total:.2f}"
     total_display.short_description = ('Total')
 
+    inlines = [OrderItemInline]     
+
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):    
     list_display = ('name', 'restaurant', 'phone', 'email')
@@ -95,15 +97,7 @@ class CustomerAdmin(admin.ModelAdmin):
         # Dono vê só suas mesas
         return qs.filter(restaurant__owner=request.user)
 
-@admin.register(OrderItem)
-class OrderItemAdmin(admin.ModelAdmin):
-    list_display = ('order', 'menu_item', 'quantity', 'price', 'subtotal_display')
-    list_filter = ('order__restaurant',)
-    
-    
-    def subtotal_display(self, obj):
-        return f"R$ {obj.subtotal():.2f}"
-    subtotal_display.short_description = 'Subtotal'
+
 
 # restaurants/admin.py
 
