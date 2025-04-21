@@ -1,8 +1,7 @@
-
 from django.apps import AppConfig
 from django.utils.translation import gettext_lazy as _
 
 class SuaAppConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'restaurants'
-    verbose_name = _('Restaurantes')
+    name = 'cashier'
+    verbose_name = _('Caixa')

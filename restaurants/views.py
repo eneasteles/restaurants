@@ -3,14 +3,14 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
 from django.shortcuts import get_object_or_404
 from django.contrib import messages
-from .models import Restaurant, Table, Category, MenuItem, Order, Customer,Payment
+from .models import Restaurant, Table, Category, MenuItem, Order, Customer
 from .forms import RestaurantForm, TableForm, MenuItemForm, OrderForm, CustomerForm
 from django.contrib.auth import views as auth_views
 
 # restaurants/views.py (adicionar isso)
 
 
-from .forms import PaymentForm
+
 
 class DashboardView(LoginRequiredMixin, TemplateView):
     template_name = 'restaurants/dashboard.html'
@@ -127,15 +127,3 @@ class OrderDetailView(LoginRequiredMixin, DetailView):
 
 
 
-class PaymentCreateView(CreateView):
-    model = Payment
-    form_class = PaymentForm
-    template_name = "restaurants/payment_form.html"
-
-    def form_valid(self, form):
-        order = get_object_or_404(Order, pk=self.kwargs["order_id"])
-        form.instance.order = order
-        return super().form_valid(form)
-
-    def get_success_url(self):
-        return reverse_lazy("order_detail", kwargs={"pk": self.object.order.id})

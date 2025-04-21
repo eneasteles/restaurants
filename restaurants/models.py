@@ -27,12 +27,20 @@ class Restaurant(models.Model):
         return self.name
 
 class Table(models.Model):
-    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='tables')
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='tables', verbose_name='Restaurante')
     number = models.CharField(_('Número'), max_length=10)
     capacity = models.PositiveIntegerField(_('Capacidade'), validators=[MinValueValidator(1)])
     is_occupied = models.BooleanField(_('Ocupada?'), default=False)
     qr_code = models.ImageField(_('QR Code'), upload_to='qr_codes/', null=True, blank=True)
 
+    
+    def get_capacity_display(self):
+        return f"{self.capacity} pessoas"
+    def get_is_occupied_display(self):
+        return _('Sim') if self.is_occupied else _('Não')
+    def get_qr_code_display(self):
+        return self.qr_code.url if self.qr_code else _('Sem QR Code')
+   
     class Meta:
         verbose_name = _('Mesa')
         verbose_name_plural = _('Mesas')
@@ -97,15 +105,15 @@ class Customer(models.Model):
 
 class Order(models.Model):
     class Status(models.TextChoices):
-        PENDING = 'PE', _('Pendente')
+        PENDING =   'PE', _('Pendente')
         PREPARING = 'PR', _('Em preparo')
-        READY = 'RE', _('Pronto')
+        READY =     'RE', _('Pronto')
         DELIVERED = 'DE', _('Entregue')
-        CANCELED = 'CA', _('Cancelado')
+        CANCELED =  'CA', _('Cancelado')
 
-    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='orders')
-    table = models.ForeignKey(Table, on_delete=models.SET_NULL, null=True, blank=True)
-    customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True)
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, verbose_name='Restaurante', related_name='orders')
+    table = models.ForeignKey(Table, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='Mesa')
+    customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='Cliente')
     status = models.CharField(_('Status'), max_length=2, choices=Status.choices, default=Status.PENDING)
     created_at = models.DateTimeField(_('Criado em'), auto_now_add=True)
     updated_at = models.DateTimeField(_('Atualizado em'), auto_now=True)
@@ -117,7 +125,7 @@ class Order(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"Pedido #{self.id} - {self.get_status_display()}"
+        return f"Pedido #{self.id} - {sum(item.subtotal() for item in self.order_items.all()):.2f}"
 
     def total(self):
         return sum(item.subtotal() for item in self.order_items.all())
@@ -132,7 +140,7 @@ class OrderItem(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(0.01)],
         null=True,
-        blank=True  # Permitir temporariamente para migrações existentes
+        blank=True
     )
     special_requests = models.TextField(_('Pedidos especiais'), blank=True)
 
@@ -145,50 +153,17 @@ class OrderItem(models.Model):
 
     def clean(self):
         """Garante que o preço seja definido antes de salvar"""
-        if not self.price:
+        if not self.price and self.menu_item:
             self.price = self.menu_item.price
         super().clean()
 
     def save(self, *args, **kwargs):
         """Sobrescreve o save para garantir o preço"""
-        self.full_clean()  # Executa a validação clean()
+        self.full_clean()
         super().save(*args, **kwargs)
 
     def subtotal(self):
         """Calcula o subtotal com tratamento para None"""
-        if self.price is None:
-            # Se o preço for None, usa o preço do menu_item
-            return self.menu_item.price * self.quantity
-        return self.price * self.quantity
+        return (self.price or self.menu_item.price) * self.quantity
+
     subtotal.short_description = _('Subtotal')
-
-
-# restaurants/models.py (adicionar isso no final)
-
-class PaymentMethod(models.Model):
-    name = models.CharField("Método", max_length=50)  # Ex: "Dinheiro", "Cartão", "PIX"
-    is_active = models.BooleanField("Ativo?", default=True)
-    needs_change = models.BooleanField("Precisa de troco?", default=False)  # Só True para Dinheiro
-
-    class Meta:
-        verbose_name = _('Forma de pagamento')
-        verbose_name_plural = _('Formas de pagamento')
-        
-
-    def __str__(self):
-        return self.name
-
-class Payment(models.Model):
-    order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="payments")
-    method = models.ForeignKey(PaymentMethod, on_delete=models.PROTECT)
-    amount = models.DecimalField("Valor pago", max_digits=10, decimal_places=2)
-    change_amount = models.DecimalField("Troco", max_digits=10, decimal_places=2, default=0)
-    transaction_code = models.CharField("Código (opcional)", max_length=100, blank=True)
-    created_at = models.DateTimeField("Data", auto_now_add=True)
-
-    class Meta:
-        verbose_name = _('Pagamento')
-        verbose_name_plural = _('Pagamentos')
-
-    def __str__(self):
-        return f"Pagamento #{self.id} ({self.method.name})"

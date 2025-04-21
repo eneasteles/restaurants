@@ -1,5 +1,5 @@
 from django import forms
-from .models import Restaurant, Table, MenuItem, Order, Customer, Payment
+from .models import Restaurant, Table, MenuItem, Order, Customer
 
 
 class RestaurantForm(forms.ModelForm):
@@ -36,6 +36,7 @@ class MenuItemForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         restaurant_id = kwargs.pop('restaurant_id', None)
         super().__init__(*args, **kwargs)
+        self.fields['price'].help_text = "Deixe em branco para usar o preço do item automaticamente"
         
         if restaurant_id:
             self.fields['category'].queryset = self.fields['category'].queryset.filter(restaurant_id=restaurant_id)
@@ -71,15 +72,3 @@ class CustomerForm(forms.ModelForm):
 
 
 
-class PaymentForm(forms.ModelForm):
-    class Meta:
-        model = Payment
-        fields = ["method", "amount", "change_amount", "transaction_code"]
-        widgets = {
-            "amount": forms.NumberInput(attrs={"step": "0.01", "min": "0.01"}),
-            "change_amount": forms.NumberInput(attrs={"step": "0.01", "min": "0"}),
-        }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["method"].queryset = PaymentMethod.objects.filter(is_active=True)

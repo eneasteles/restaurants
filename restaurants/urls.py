@@ -23,9 +23,6 @@ urlpatterns = [
     path('restaurant/<int:restaurant_id>/orders/add/', views.OrderCreateView.as_view(), name='order_add'),
     path('orders/<int:pk>/', views.OrderDetailView.as_view(), name='order_detail'),
 
-    path('accounts/login/', auth_views.LoginView.as_view(template_name='registration/login.html'), name='login'),
-    path('accounts/logout/', auth_views.LogoutView.as_view(), name='logout'),
-    
-    path("orders/<int:order_id>/pay/", PaymentCreateView.as_view(), name="payment_create"),
+
 
 ]

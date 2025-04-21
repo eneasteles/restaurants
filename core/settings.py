@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'restaurants',
+    'cashier',
 ]
 
 MIDDLEWARE = [
@@ -71,6 +72,22 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 WSGI_APPLICATION = 'core.wsgi.application'
+
+USE_I18N = True
+LANGUAGE_CODE = 'pt-br'  # ou 'en-us', dependendo da linguagem padrão
+LOCALE_PATHS = [BASE_DIR / "locale"]  # pasta onde os arquivos .po/.mo vão ficar
+
+
+USE_L10N = True  # Opcional, para formatação de datas, números, etc.
+
+LANGUAGES = [
+    ('pt-br', 'Português'),
+    ('en', 'English'),
+    # Adicione outros idiomas que você deseja suportar
+]
+
+LANGUAGE_CODE = 'pt-br'  # Defina o idioma padrão
+
 
 
 # Database
