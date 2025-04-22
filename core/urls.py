@@ -3,6 +3,10 @@ from django.urls import path, include
 from django.contrib.auth import views as auth_views
 from django.views.generic.base import RedirectView
 
+from core.api import api
+
+
+
 
 admin.site.site_header = "Administração de Restaurantes"
 admin.site.site_title = "Painel Admin do Restaurantes"
@@ -14,6 +18,8 @@ urlpatterns = [
     path('', admin.site.urls),
     path('cashier/', include('cashier.urls')),
     path('restaurants/', include('restaurants.urls')),
+    path("api/", api.urls),
+
     
     # Sistema de autenticação completo
 

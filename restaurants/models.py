@@ -115,7 +115,7 @@ class Card(models.Model):
         verbose_name_plural = _('Cartões')
 
     def __str__(self):
-        return f"Cartão {self.number} - {sum(item.subtotal() for item in self.card_items.all()):.2f}"
+        return f"Cartão {self.number}/id:{self.id} - {sum(item.subtotal() for item in self.card_items.all()):.2f}"
     
 
     def total(self):
@@ -219,4 +219,32 @@ class OrderItem(models.Model):
         return (self.price or self.menu_item.price) * self.quantity
 
     subtotal.short_description = _('Subtotal')
+
+    from django.db import models
+from django.utils.translation import gettext_lazy as _
+from django.core.validators import MinValueValidator
+
+class CardPayment(models.Model):
+    class PaymentMethod(models.TextChoices):
+        CASH = 'CA', _('Dinheiro')
+        CREDIT = 'CR', _('Crédito')
+        DEBIT = 'DE', _('Débito')
+        PIX = 'PX', _('Pix')
+        OTHER = 'OT', _('Outro')
+
+    restaurant = models.ForeignKey('Restaurant', on_delete=models.CASCADE, related_name='card_payments')
+    card = models.ForeignKey('Card', on_delete=models.CASCADE, related_name='payments')
+    amount = models.DecimalField(_('Valor pago'), max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
+    payment_method = models.CharField(_('Forma de pagamento'), max_length=2, choices=PaymentMethod.choices)
+    paid_at = models.DateTimeField(_('Pago em'), auto_now_add=True)
+    notes = models.TextField(_('Observações'), blank=True)
+
+    class Meta:
+        verbose_name = _('Recebimento no Cartão')
+        verbose_name_plural = _('Recebimentos nos Cartões')
+        ordering = ['-paid_at']
+
+    def __str__(self):
+        return f"R$ {self.amount:.2f} no cartão {self.card.number} id:{self.card.id} via {self.get_payment_method_display()}"
+
 

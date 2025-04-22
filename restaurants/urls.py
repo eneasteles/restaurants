@@ -3,10 +3,17 @@ from . import views
 
 app_name = 'restaurants'
 
+# restaurante_saas/urls.py ou restaurants/urls.py
+from django.contrib import admin
+from django.urls import path
+from core.api import api  # importa o objeto da API do Django Ninja
+
+
+
 urlpatterns = [
     # Dashboard
     path('', views.DashboardView.as_view(), name='dashboard'),
-    
+
     # Restaurantes
     path('restaurant/add/', views.RestaurantCreateView.as_view(), name='restaurant_add'),
     path('restaurant/<int:pk>/edit/', views.RestaurantUpdateView.as_view(), name='restaurant_edit'),

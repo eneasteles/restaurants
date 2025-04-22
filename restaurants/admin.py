@@ -282,6 +282,38 @@ class CardAdmin(admin.ModelAdmin):
 
 
 
+from django.contrib import admin
+from .models import CardPayment, Restaurant, Card
+
+@admin.register(CardPayment)
+class CardPaymentAdmin(admin.ModelAdmin):
+    list_display = ('card', 'restaurant', 'amount', 'payment_method', 'paid_at')
+    list_filter = ('payment_method', 'paid_at')
+    search_fields = ('card__number', 'restaurant__name')
+    readonly_fields = ('paid_at',)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs if request.user.is_superuser else qs.filter(restaurant__owner=request.user)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if not request.user.is_superuser:
+            if db_field.name == "restaurant":
+                kwargs["queryset"] = Restaurant.objects.filter(owner=request.user)
+            elif db_field.name == "card":
+                kwargs["queryset"] = Card.objects.filter(restaurant__owner=request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def get_fields(self, request, obj=None):
+        fields = super().get_fields(request, obj)
+        if not request.user.is_superuser:
+            return [f for f in fields if f != 'restaurant']
+        return fields
+
+    def save_model(self, request, obj, form, change):
+        if not request.user.is_superuser and not obj.restaurant_id:
+            obj.restaurant = Restaurant.objects.filter(owner=request.user).first()
+        super().save_model(request, obj, form, change)
 
 # restaurants/admin.py
 
