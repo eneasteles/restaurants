@@ -103,6 +103,58 @@ class Customer(models.Model):
     def __str__(self):
         return f"{self.name} - {self.phone or 'Sem telefone'}"
 
+class Card(models.Model):
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='cards')
+    number = models.PositiveIntegerField(_('Número do Cartão'))
+    is_active = models.BooleanField(_('Ativo?'), default=True)
+
+    class Meta:
+        unique_together = ('restaurant', 'number')
+        ordering = ['number']
+        verbose_name = _('Cartão')
+        verbose_name_plural = _('Cartões')
+
+    def __str__(self):
+        return f"Cartão {self.number} - {sum(item.subtotal() for item in self.card_items.all()):.2f}"
+    
+
+    def total(self):
+        return sum(item.subtotal() for item in self.card_items.all())
+
+class CardItem(models.Model):
+    card = models.ForeignKey(Card, on_delete=models.CASCADE, related_name='card_items')
+    menu_item = models.ForeignKey(MenuItem, on_delete=models.PROTECT)
+    quantity = models.PositiveIntegerField(_('Quantidade'), default=1, validators=[MinValueValidator(1)])
+    price = models.DecimalField(
+        _('Preço unitário'),
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(0.01)],
+        null=True,
+        blank=True
+    )
+
+    class Meta:
+        verbose_name = _('Item do Cartão')
+        verbose_name_plural = _('Itens do Cartão')
+
+    def __str__(self):
+        return f"{self.menu_item.name} x{self.quantity}"
+
+
+    def clean(self):
+        """Garante que o preço seja definido antes de salvar"""
+        if not self.price and self.menu_item:
+            self.price = self.menu_item.price
+        super().clean()
+    
+    def subtotal(self):
+        """Calcula o subtotal com tratamento para None"""
+        return (self.price or self.menu_item.price) * self.quantity
+
+    subtotal.short_description = _('Subtotal')
+        
+
 class Order(models.Model):
     class Status(models.TextChoices):
         PENDING =   'PE', _('Pendente')
@@ -167,3 +219,4 @@ class OrderItem(models.Model):
         return (self.price or self.menu_item.price) * self.quantity
 
     subtotal.short_description = _('Subtotal')
+
