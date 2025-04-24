@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import Restaurant, Table, Category, MenuItem, Order, OrderItem, Customer, Card, CardItem
+from django.utils.timezone import localdate
 
 
 class OrderItemInline(admin.TabularInline):
@@ -252,11 +253,39 @@ class CardItemInline(admin.TabularInline):
         return f"R$ {instance.subtotal():.2f}"
     subtotal.short_description = ('Subtotal')
 
+class DisponibilidadeCartaoFilter(admin.SimpleListFilter):
+    title = 'Disponibilidade'
+    parameter_name = 'disponivel'
+
+    def lookups(self, request, model_admin):
+        return (
+            ('livre', 'Disponível para uso'),
+            ('pago', 'Já pago hoje'),
+        )
+
+    def queryset(self, request, queryset):
+        today = localdate()
+        pagos_hoje = CardPayment.objects.filter(
+            paid_at__date=today
+        ).values_list('card_id', flat=True)
+
+        if self.value() == 'livre':
+            return queryset.exclude(id__in=pagos_hoje)
+        if self.value() == 'pago':
+            return queryset.filter(id__in=pagos_hoje)
+        return queryset
+
+
+
 @admin.register(Card)
 class CardAdmin(admin.ModelAdmin):
-    list_display = ('number',  'total_display')
-    list_filter = ('number', 'is_active')
+    list_display = ('id', 'number', 'is_active', 'total_display', 'status_display')
+    list_filter = ('number', 'is_active', DisponibilidadeCartaoFilter)
     readonly_fields = ('total_display',)
+
+    def status_display(self, obj):
+        return "Pago hoje" if obj.was_paid_today else "Disponível"
+    status_display.short_description = "Status do dia"
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -277,6 +306,8 @@ class CardAdmin(admin.ModelAdmin):
         if not request.user.is_superuser:
             fields = [f for f in fields if f != 'restaurant']
         return fields
+    
+    list_filter = ('number', 'is_active', DisponibilidadeCartaoFilter)
     inlines = [CardItemInline]
 
 
@@ -301,8 +332,19 @@ class CardPaymentAdmin(admin.ModelAdmin):
             if db_field.name == "restaurant":
                 kwargs["queryset"] = Restaurant.objects.filter(owner=request.user)
             elif db_field.name == "card":
-                kwargs["queryset"] = Card.objects.filter(restaurant__owner=request.user)
+                # Filtra cartões ativos e sem pagamento feito hoje
+                pagos_hoje = CardPayment.objects.filter(
+                    restaurant__owner=request.user,
+                    paid_at__date=localdate()
+                ).values_list('card_id', flat=True)
+
+                kwargs["queryset"] = Card.objects.filter(
+                    restaurant__owner=request.user,
+                    is_active=True
+                ).exclude(id__in=pagos_hoje)
+
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
 
     def get_fields(self, request, obj=None):
         fields = super().get_fields(request, obj)
@@ -315,6 +357,12 @@ class CardPaymentAdmin(admin.ModelAdmin):
             obj.restaurant = Restaurant.objects.filter(owner=request.user).first()
         super().save_model(request, obj, form, change)
 
-# restaurants/admin.py
+        # Desativar o cartão depois de salvar o pagamento
+        if obj.card and obj.card.is_active:
+            obj.card.is_active = False
+            obj.card.save()
+
+ 
+ # restaurants/admin.py
 
 

@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import MinValueValidator
+from django.utils.timezone import localdate
 
 User = get_user_model()
 
@@ -108,8 +109,15 @@ class Card(models.Model):
     number = models.PositiveIntegerField(_('Número do Cartão'))
     is_active = models.BooleanField(_('Ativo?'), default=True)
 
+
+
+    @property
+    def was_paid_today(self):
+        today = localdate()
+        return self.payments.filter(paid_at__date=today).exists()
+
     class Meta:
-        unique_together = ('restaurant', 'number')
+        unique_together = ('id','restaurant', 'number')
         ordering = ['number']
         verbose_name = _('Cartão')
         verbose_name_plural = _('Cartões')
@@ -238,7 +246,11 @@ class CardPayment(models.Model):
     payment_method = models.CharField(_('Forma de pagamento'), max_length=2, choices=PaymentMethod.choices)
     paid_at = models.DateTimeField(_('Pago em'), auto_now_add=True)
     notes = models.TextField(_('Observações'), blank=True)
+    def is_paid_today(self):
+        return self.payments.filter(paid_at__date=localdate()).exists()
 
+    is_paid_today.boolean = True
+    is_paid_today.short_description = "Pago hoje?"
     class Meta:
         verbose_name = _('Recebimento no Cartão')
         verbose_name_plural = _('Recebimentos nos Cartões')
