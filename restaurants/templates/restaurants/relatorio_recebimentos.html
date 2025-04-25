@@ -1,0 +1,55 @@
+{% load custom_filters %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório de Recebimentos nos Cartões</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+        th { background-color: #f2f2f2; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .categoria { background-color: #e0e0e0; font-weight: bold; }
+        .total-categoria { background-color: #d0ffd0; font-weight: bold; }
+        .total-geral { background-color: #ffd0d0; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Relatório de Recebimentos nos Cartões</h1>
+
+    {% for metodo, pagamentos in agrupado.items %}
+        <h2 class="categoria">{{ metodo }}</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Restaurante</th>
+                    <th>Cartão</th>
+                    <th>Valor</th>
+                    <th>Data</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pagamento in pagamentos %}
+                <tr>
+                    <td>{{ pagamento.restaurant.name }}</td>
+                    <td>{{ pagamento.card.number }}</td>
+                    <td>R$ {{ pagamento.amount|floatformat:2 }}</td>
+                    <td>{{ pagamento.paid_at|date:"d/m/Y H:i" }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="total-categoria">
+                    <td colspan="2">Total {{ metodo }}</td>
+                    <td colspan="2">R$ {{ totais|dict_get:metodo|floatformat:2 }}</td>
+                </tr>
+            </tbody>
+        </table>
+    {% empty %}
+        <p>Nenhum pagamento encontrado.</p>
+    {% endfor %}
+
+    <h2 class="total-geral">Total Geral: R$ {{ total_geral|floatformat:2 }}</h2>
+
+</body>
+</html>

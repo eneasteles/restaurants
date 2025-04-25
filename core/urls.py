@@ -15,11 +15,11 @@ urlpatterns = [
     # Admin com logout customizado
     
     
-    path('', admin.site.urls),
-    path('cashier/', include('cashier.urls')),
-    path('restaurants/', include('restaurants.urls')),
+    
+    path('cashier/', include('cashier.urls')),    
+    path('restaurants/', include('restaurants.urls')),  # <-- ADICIONE ESTA LINHA
     path("api/", api.urls),
-
+    path('', admin.site.urls),
     
     # Sistema de autenticação completo
 

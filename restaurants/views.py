@@ -3,9 +3,11 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.urls import reverse_lazy
 from django.shortcuts import get_object_or_404
 from django.contrib import messages
-from .models import Restaurant, Table, Category, MenuItem, Order, Customer
+from .models import Restaurant, Table, Category, MenuItem, Order, CardPayment
 from .forms import RestaurantForm, TableForm, MenuItemForm, OrderForm, CustomerForm
 from django.contrib.auth import views as auth_views
+
+from django.shortcuts import render
 
 # restaurants/views.py (adicionar isso)
 
@@ -127,3 +129,40 @@ class OrderDetailView(LoginRequiredMixin, DetailView):
 
 
 
+ # ajuste o import conforme seu app
+
+from collections import defaultdict
+
+from django.utils.timezone import localdate
+from datetime import datetime
+
+def relatorio_recebimentos(request):
+    data_filtro = request.GET.get('data')  # pega a data da URL se existir
+
+    pagamentos = CardPayment.objects.select_related('restaurant', 'card').order_by('payment_method', '-paid_at')
+
+    if data_filtro:
+        try:
+            data = datetime.strptime(data_filtro, '%Y-%m-%d').date()
+            pagamentos = pagamentos.filter(paid_at__date=data)
+        except ValueError:
+            data = None
+    else:
+        data = None
+
+    agrupado = defaultdict(list)
+    totais = defaultdict(float)
+    total_geral = 0
+
+    for pagamento in pagamentos:
+        agrupado[pagamento.get_payment_method_display()].append(pagamento)
+        totais[pagamento.get_payment_method_display()] += float(pagamento.amount)
+        total_geral += float(pagamento.amount)
+
+    context = {
+        'agrupado': dict(agrupado),
+        'totais': dict(totais),
+        'total_geral': total_geral,
+        'data_filtro': data_filtro,  # passa a data atual no contexto
+    }
+    return render(request, 'relatorio_recebimentos.html', context)
