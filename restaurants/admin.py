@@ -82,6 +82,7 @@ class TableAdmin(admin.ModelAdmin):
         if not request.user.is_superuser and not obj.restaurant_id:
             obj.restaurant = Restaurant.objects.filter(owner=request.user).first()
         super().save_model(request, obj, form, change)
+        
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
     list_display = ('name', 'restaurant', 'order')
@@ -116,8 +117,15 @@ class CategoryAdmin(admin.ModelAdmin):
     
     def save_model(self, request, obj, form, change):
         if not request.user.is_superuser and not obj.restaurant_id:
-            obj.restaurant = Restaurant.objects.filter(owner=request.user).first()
+            restaurant = Restaurant.objects.filter(owner=request.user).first()
+            if not restaurant:
+                raise ValueError("Usuário não possui restaurante cadastrado.")
+            obj.restaurant = restaurant
         super().save_model(request, obj, form, change)
+
+        
+   
+
 
 @admin.register(MenuItem)
 class MenuItemAdmin(admin.ModelAdmin):
