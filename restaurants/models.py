@@ -123,7 +123,7 @@ class Card(models.Model):
         verbose_name_plural = _('Cartões')
 
     def __str__(self):
-        return f"Cartão {self.number}/id:{self.id} - {sum(item.subtotal() for item in self.card_items.all()):.2f}"
+        return f"{self.number} seq: {self.id} - {sum(item.subtotal() for item in self.card_items.all()):.2f}"
     
 
     def total(self):

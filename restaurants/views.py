@@ -152,7 +152,8 @@ def relatorio_recebimentos(request):
         except ValueError:
             data = None
     else:
-        data = None
+        data = localdate()
+        pagamentos = pagamentos.filter(paid_at__date=data)
 
     agrupado = defaultdict(list)
     totais = defaultdict(float)

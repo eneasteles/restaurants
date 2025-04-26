@@ -323,6 +323,7 @@ class CardAdmin(admin.ModelAdmin):
 
 from django.contrib import admin
 from .models import CardPayment, Restaurant, Card
+from django import forms
 
 @admin.register(CardPayment)
 class CardPaymentAdmin(admin.ModelAdmin):
@@ -363,6 +364,10 @@ class CardPaymentAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         if not request.user.is_superuser and not obj.restaurant_id:
             obj.restaurant = Restaurant.objects.filter(owner=request.user).first()
+
+
+
+
         super().save_model(request, obj, form, change)
 
         # Desativar o cartão depois de salvar o pagamento
