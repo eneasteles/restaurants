@@ -19,7 +19,7 @@ urlpatterns = [
     path('cashier/', include('cashier.urls')),    
     path('restaurants/', include('restaurants.urls')),  # <-- ADICIONE ESTA LINHA
     path("api/", api.urls),
-    path('', admin.site.urls),
+    path('admin/', admin.site.urls),
     
     # Sistema de autenticação completo
 
