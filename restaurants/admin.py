@@ -325,12 +325,15 @@ from django.contrib import admin
 from .models import CardPayment, Restaurant, Card
 from django import forms
 
+
 @admin.register(CardPayment)
 class CardPaymentAdmin(admin.ModelAdmin):
-    list_display = ('card', 'restaurant', 'amount', 'payment_method', 'paid_at')
+    list_display = ('card', 'restaurant', 'amount', 'payment_method', 'paid_amount', 'change_amount', 'paid_at')
     list_filter = ('payment_method', 'paid_at')
     search_fields = ('card__number', 'restaurant__name')
-    readonly_fields = ('paid_at',)
+    readonly_fields = ('amount', 'change_amount', 'paid_at')
+
+
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)

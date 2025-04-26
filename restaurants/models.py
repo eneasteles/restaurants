@@ -244,8 +244,31 @@ class CardPayment(models.Model):
     card = models.ForeignKey('Card', on_delete=models.CASCADE, related_name='payments')
     amount = models.DecimalField(_('Valor pago'), max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
     payment_method = models.CharField(_('Forma de pagamento'), max_length=2, choices=PaymentMethod.choices)
+    paid_amount = models.DecimalField(_('Valor recebido em dinheiro'), max_digits=10, decimal_places=2, null=True, blank=True)
+    change_amount = models.DecimalField(_('Troco a devolver'), max_digits=10, decimal_places=2, null=True, blank=True)
     paid_at = models.DateTimeField(_('Pago em'), auto_now_add=True)
     notes = models.TextField(_('Observações'), blank=True)
+
+    def save(self, *args, **kwargs):
+    # Sempre atualiza o valor da venda baseado no total do cartão
+        if self.card:
+            self.amount = self.card.total()
+
+        if self.payment_method == self.PaymentMethod.CASH:
+            if self.paid_amount is not None:
+                # Se o operador informou o valor recebido, calcula o troco
+                self.change_amount = self.paid_amount - self.amount
+            else:
+                # Se NÃO informou, assume que recebeu exatamente o valor da venda
+                self.paid_amount = self.amount
+                self.change_amount = 0
+        else:
+            # Para outras formas de pagamento, zera esses campos
+            self.paid_amount = None
+            self.change_amount = None
+
+        super().save(*args, **kwargs)
+
     def is_paid_today(self):
         return self.payments.filter(paid_at__date=localdate()).exists()
 
