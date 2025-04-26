@@ -6,7 +6,7 @@ app_name = 'restaurants'
 
 urlpatterns = [
     # Dashboard
-    path('', views.DashboardView.as_view(), name='dashboard'),
+    path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
 
     # Restaurante
     path('restaurant/add/', views.RestaurantCreateView.as_view(), name='restaurant_add'),
