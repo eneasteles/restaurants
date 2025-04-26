@@ -139,7 +139,11 @@ from datetime import datetime
 def relatorio_recebimentos(request):
     data_filtro = request.GET.get('data')  # pega a data da URL se existir
 
-    pagamentos = CardPayment.objects.select_related('restaurant', 'card').order_by('payment_method', '-paid_at')
+    # Busca apenas pagamentos do dono logado
+    pagamentos = CardPayment.objects.select_related('restaurant', 'card').filter(
+        restaurant__owner=request.user
+    ).order_by('payment_method', '-paid_at')
+
 
     if data_filtro:
         try:
