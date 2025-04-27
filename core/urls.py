@@ -17,7 +17,7 @@ urlpatterns = [
     
     
     path('cashier/', include('cashier.urls')),    
-    path('restaurants/', include('restaurants.urls')),  # <-- ADICIONE ESTA LINHA
+    path('', include('restaurants.urls')),  # <-- ADICIONE ESTA LINHA
     path("api/", api.urls),
     path('admin/', admin.site.urls),
     

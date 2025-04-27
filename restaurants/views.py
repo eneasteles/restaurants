@@ -171,3 +171,6 @@ def relatorio_recebimentos(request):
         'data_filtro': data_filtro,  # passa a data atual no contexto
     }
     return render(request, 'relatorio_recebimentos.html', context)
+
+def home(request):
+    return render(request, 'restaurants/home.html')

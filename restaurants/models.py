@@ -1,4 +1,7 @@
+import re
 from django.db import models
+from django.core.exceptions import ValidationError
+
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import MinValueValidator
@@ -10,6 +13,7 @@ class Restaurant(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='restaurante')
     name = models.CharField(_('Nome'), max_length=100)
     slug = models.SlugField(_('Slug'), unique=True)
+    chave_pix = models.CharField(_('Chave Pix'), max_length=100, blank=True)
     address = models.TextField(_('Endereço'))
     phone = models.CharField(_('Telefone'), max_length=20)
     email = models.EmailField(_('E-mail'))
@@ -17,6 +21,7 @@ class Restaurant(models.Model):
     is_active = models.BooleanField(_('Ativo'), default=True)
     created_at = models.DateTimeField(_('Criado em'), auto_now_add=True)
     updated_at = models.DateTimeField(_('Atualizado em'), auto_now=True)
+
 
     
     class Meta:
@@ -26,6 +31,30 @@ class Restaurant(models.Model):
 
     def __str__(self):
         return self.name
+    
+    def clean(self):
+        super().clean()
+
+        if self.chave_pix:
+            chave = self.chave_pix.strip()
+
+            # Regex para validar
+            padrao_email = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+            padrao_telefone = r"^\+55\d{11}$"  # Exemplo: +5511999999999
+            padrao_cpf = r"^\d{11}$"           # Só números, 11 dígitos
+            padrao_cnpj = r"^\d{14}$"          # Só números, 14 dígitos
+            padrao_uuid = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+
+            if not (
+                re.match(padrao_email, chave) or
+                re.match(padrao_telefone, chave) or
+                re.match(padrao_cpf, chave) or
+                re.match(padrao_cnpj, chave) or
+                re.match(padrao_uuid, chave)
+            ):
+                raise ValidationError({
+                    'chave_pix': "Chave Pix inválida. Deve ser um e-mail, telefone (+55...), CPF, CNPJ ou chave aleatória."
+                })
 
 class Table(models.Model):
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='tables', verbose_name='Restaurante')
@@ -123,7 +152,7 @@ class Card(models.Model):
         verbose_name_plural = _('Cartões')
 
     def __str__(self):
-        return f"{self.number} seq: {self.id} - {sum(item.subtotal() for item in self.card_items.all()):.2f}"
+        return f"{self.number} Valor: {sum(item.subtotal() for item in self.card_items.all()):.2f}"
     
 
     def total(self):

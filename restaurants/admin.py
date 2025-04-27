@@ -1,6 +1,61 @@
+from django.utils.safestring import mark_safe
+
 from django.contrib import admin
 from .models import Restaurant, Table, Category, MenuItem, Order, OrderItem, Customer, Card, CardItem
 from django.utils.timezone import localdate
+
+import qrcode
+import base64
+from io import BytesIO
+
+import uuid
+
+def gerar_payload_pix(chave_pix: str, valor: float, nome_recebedor: str, cidade: str, txid: str = None) -> str:
+    valor_str = f"{valor:.2f}"
+
+    if not txid:
+        # Gera um txid automático se não receber
+        txid = uuid.uuid4().hex[:6].upper()  # 6 caracteres aleatórios
+
+    gui = "BR.GOV.BCB.PIX"
+    merchant_info = f"00{len(gui):02d}{gui}" + f"01{len(chave_pix):02d}{chave_pix}"
+    merchant_info_formatado = f"26{len(merchant_info):02d}{merchant_info}"
+
+    info_adicional = f"05{len(txid):02d}{txid}"
+    info_adicional_formatado = f"62{len(info_adicional):02d}{info_adicional}"
+
+    payload_sem_crc = (
+        "000201"
+        + merchant_info_formatado
+        + "52040000"
+        + "5303986"
+        + f"54{len(valor_str):02d}{valor_str}"
+        + "5802BR"
+        + f"59{len(nome_recebedor):02d}{nome_recebedor}"
+        + f"60{len(cidade):02d}{cidade}"
+        + info_adicional_formatado
+        + "6304"
+    )
+
+    crc16 = calcular_crc16(payload_sem_crc)
+    payload_completo = payload_sem_crc + crc16
+    return payload_completo
+
+
+def calcular_crc16(payload):
+    polinomio = 0x1021
+    resultado = 0xFFFF
+
+    for caractere in payload:
+        resultado ^= ord(caractere) << 8
+        for _ in range(8):
+            if (resultado & 0x8000) != 0:
+                resultado = (resultado << 1) ^ polinomio
+            else:
+                resultado <<= 1
+            resultado &= 0xFFFF
+
+    return f"{resultado:04X}"
 
 
 class OrderItemInline(admin.TabularInline):
@@ -328,10 +383,21 @@ from django import forms
 
 @admin.register(CardPayment)
 class CardPaymentAdmin(admin.ModelAdmin):
-    list_display = ('card', 'restaurant', 'amount', 'payment_method', 'paid_amount', 'change_amount', 'paid_at')
+    list_display = ('card', 'amount', 'payment_method', 'paid_amount', 'change_amount', 'paid_at')
     list_filter = ('payment_method', 'paid_at')
     search_fields = ('card__number', 'restaurant__name')
-    readonly_fields = ('amount', 'change_amount', 'paid_at')
+    readonly_fields = ('amount', 'change_amount', 'paid_at','qrcode_pix')
+
+    def get_fields(self, request, obj=None):
+        fields = super().get_fields(request, obj)
+        if not request.user.is_superuser:
+            fields = [f for f in fields if f != 'restaurant']
+
+        # Adiciona o qrcode_pix manualmente no form
+        if 'qrcode_pix' not in fields:
+            fields.append('qrcode_pix')
+
+        return fields
 
 
 
@@ -378,7 +444,35 @@ class CardPaymentAdmin(admin.ModelAdmin):
             obj.card.is_active = False
             obj.card.save()
 
- 
+    def qrcode_pix(self, obj):
+        if obj.payment_method != obj.PaymentMethod.PIX:
+            return "Forma de pagamento não é Pix."
+
+        if not obj.restaurant.chave_pix:
+            return "Restaurante sem chave Pix cadastrada."
+        
+        txid = f"CARD{obj.card.number:04d}"  # Exemplo: cartão 23 vira "CARD0023"
+
+        # Gerar Payload Pix
+        payload = gerar_payload_pix(
+            chave_pix=obj.restaurant.chave_pix,  # <- CORRETO AGORA
+            valor=float(obj.amount),
+            #nome_recebedor=obj.restaurant.name[:25],  # Máximo 25 caracteres
+            nome_recebedor="ENEAS BEZERRA TELES",
+            cidade="Fortaleza",
+            txid=txid
+        )
+
+        # Gerar QR Code
+        qr = qrcode.make(payload)
+        buffer = BytesIO()
+        qr.save(buffer, format='PNG')
+        img_base64 = base64.b64encode(buffer.getvalue()).decode()
+        img_html = f'<img src="data:image/png;base64,{img_base64}" width="300" height="300" />'
+        return mark_safe(img_html)
+
+
+    qrcode_pix.short_description = "QR Code Pix"
  # restaurants/admin.py
 
 

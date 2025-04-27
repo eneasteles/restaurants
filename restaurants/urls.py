@@ -5,6 +5,9 @@ from . import views
 app_name = 'restaurants'
 
 urlpatterns = [
+    # home
+    path('', views.home, name='home'),
+
     # Dashboard
     path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
 
@@ -25,5 +28,5 @@ urlpatterns = [
     path('orders/<int:pk>/', views.OrderDetailView.as_view(), name='order_detail'),
 
     # RELATÓRIO Recebimentos
-    path('relatorio-recebimentos/', views.relatorio_recebimentos, name='relatorio-recebimentos'),
+    path('restaurants/relatorio-recebimentos/', views.relatorio_recebimentos, name='relatorio-recebimentos'),
 ]
