@@ -1,7 +1,7 @@
 from django.utils.safestring import mark_safe
 
 from django.contrib import admin
-from .models import Restaurant, Table, Category, MenuItem, Order, OrderItem, Customer, Card, CardItem
+from .models import Restaurant, Table, Category, MenuItem, Order, OrderItem, Customer, Card, CardItem, Stock
 from django.utils.timezone import localdate
 
 import qrcode
@@ -476,3 +476,72 @@ class CardPaymentAdmin(admin.ModelAdmin):
  # restaurants/admin.py
 
 
+@admin.register(Stock)
+class StockAdmin(admin.ModelAdmin):
+    list_display = ('menu_item_name', 'quantity')
+    search_fields = ('menu_item__name',)
+    actions = ['repor_estoque']
+
+    def menu_item_name(self, obj):
+        return obj.menu_item.name
+    menu_item_name.short_description = 'Item do Menu'
+
+    def restaurant_name(self, obj):
+        return obj.restaurant.name
+    restaurant_name.short_description = 'Restaurante'
+
+    @admin.action(description='Repor 10 unidades selecionadas')
+    def repor_estoque(self, request, queryset):
+        for stock in queryset:
+            stock.quantity += 10
+            stock.save()
+        self.message_user(request, "Reposição concluída com sucesso!")
+
+from .models import StockEntry, StockEntryItem
+
+class StockEntryItemInline(admin.TabularInline):
+    model = StockEntryItem
+    extra = 1
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Garante que só itens do restaurante certo aparecem"""
+        if db_field.name == "menu_item" and not request.user.is_superuser:
+            # Se estiver editando uma nota, limitar os itens ao restaurante dela
+            parent_id = request.resolver_match.kwargs.get('object_id')
+            if parent_id:
+                try:
+                    stock_entry = StockEntry.objects.get(pk=parent_id)
+                    kwargs["queryset"] = MenuItem.objects.filter(restaurant=stock_entry.restaurant)
+                except StockEntry.DoesNotExist:
+                    kwargs["queryset"] = MenuItem.objects.none()
+            else:
+                kwargs["queryset"] = MenuItem.objects.filter(restaurant__owner=request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+
+@admin.register(StockEntry)
+class StockEntryAdmin(admin.ModelAdmin):
+    list_display = ('id', 'restaurant', 'created_at', 'supplier')
+    search_fields = ('restaurant__name', 'supplier')
+    list_filter = ('restaurant', 'created_at')
+    date_hierarchy = 'created_at'
+    inlines = [StockEntryItemInline]
+    exclude = ('restaurant',)  # <-- OCULTA o campo no admin!
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(restaurant__owner=request.user)
+
+    def save_model(self, request, obj, form, change):
+        """Define automaticamente o restaurante na criação"""
+        if not obj.pk:  # Só na criação
+            obj.restaurant = Restaurant.objects.get(owner=request.user)
+        super().save_model(request, obj, form, change)
+
+
+
+
+    # (o resto igual que mostrei acima)

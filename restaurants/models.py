@@ -256,8 +256,22 @@ class OrderItem(models.Model):
         return (self.price or self.menu_item.price) * self.quantity
 
     subtotal.short_description = _('Subtotal')
+    
+class Stock(models.Model):
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='stocks')
+    menu_item = models.OneToOneField(MenuItem, on_delete=models.CASCADE, related_name='stock')
+    quantity = models.FloatField(_('Quantidade em estoque'), default=0)
 
-    from django.db import models
+    class Meta:
+        verbose_name = _('Estoque')
+        verbose_name_plural = _('Estoques')
+        ordering = ['menu_item__name']
+
+    def __str__(self):
+        return f"{self.menu_item.name} - {self.quantity} unidades"
+
+
+from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import MinValueValidator
 
@@ -312,3 +326,74 @@ class CardPayment(models.Model):
         return f"R$ {self.amount:.2f} no cartão {self.card.number} id:{self.card.id} via {self.get_payment_method_display()}"
 
 
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+@receiver(post_save, sender=CardPayment)
+def atualizar_estoque_ao_receber_pagamento(sender, instance, created, **kwargs):
+    if created:  # Só ajusta estoque em novos pagamentos
+        card = instance.card
+        for item in card.card_items.all():
+            menu_item = item.menu_item
+            try:
+                stock = menu_item.stock  # acessa o Stock pelo OneToOne                
+                stock.quantity -= item.quantity
+                stock.save()
+
+            except Stock.DoesNotExist:
+                # Se não existir controle de estoque ainda para esse item, pode ignorar ou criar
+               # Se não existir, cria o estoque já negativo
+                Stock.objects.create(
+                    restaurant=menu_item.restaurant,
+                    menu_item=menu_item,
+                    quantity=-item.quantity  # negativo pela quantidade vendida
+                )
+
+
+class StockEntry(models.Model):
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='stock_entries')
+    created_at = models.DateTimeField(_('Data de Entrada'), auto_now_add=True)
+    supplier = models.CharField(_('Fornecedor'), max_length=255, blank=True)
+    notes = models.TextField(_('Observações'), blank=True)
+
+    class Meta:
+        verbose_name = _('Nota de Entrada')
+        verbose_name_plural = _('Notas de Entrada')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Entrada #{self.id} - {self.restaurant.name} - {self.created_at.strftime('%d/%m/%Y')}"
+
+
+class StockEntryItem(models.Model):
+    stock_entry = models.ForeignKey(StockEntry, on_delete=models.CASCADE, related_name='items')
+    menu_item = models.ForeignKey(MenuItem, on_delete=models.PROTECT)
+    quantity = models.PositiveIntegerField(_('Quantidade'), validators=[MinValueValidator(1)])
+
+    class Meta:
+        verbose_name = _('Item da Nota de Entrada')
+        verbose_name_plural = _('Itens da Nota de Entrada')
+
+    def __str__(self):
+        return f"{self.menu_item.name} (+{self.quantity})"
+
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+@receiver(post_save, sender=StockEntryItem)
+def atualizar_estoque_entrada(sender, instance, created, **kwargs):
+    if created:
+        menu_item = instance.menu_item
+        quantidade = instance.quantity
+
+        try:
+            stock = menu_item.stock
+            stock.quantity += quantidade
+            stock.save()
+        except Stock.DoesNotExist:
+            # Se não existir, cria um estoque inicial positivo
+            Stock.objects.create(
+                restaurant=menu_item.restaurant,
+                menu_item=menu_item,
+                quantity=quantidade
+            )
