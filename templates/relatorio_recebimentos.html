@@ -107,8 +107,8 @@
         <table>
             <thead>
                 <tr>
-                    <th>Restaurante</th>
-                    <th>Cartão</th>
+                    
+                    <th>Comanda</th>
                     <th>Valor</th>
                     <th>Data</th>
                 </tr>
@@ -116,7 +116,7 @@
             <tbody>
                 {% for pagamento in pagamentos %}
                 <tr>
-                    <td>{{ pagamento.restaurant.name }}</td>
+                    
                     <td>{{ pagamento.card.number }}</td>
                     <td>R$ {{ pagamento.amount|floatformat:2 }}</td>
                     <td>{{ pagamento.paid_at|date:"d/m/Y H:i" }}</td>
