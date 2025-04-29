@@ -110,8 +110,8 @@ class MenuItem(models.Model):
     ingredients = models.TextField(_('Ingredientes'), blank=True)
 
     class Meta:
-        verbose_name = _('Item do Menu')
-        verbose_name_plural = _('Itens do Menu')
+        verbose_name = _('Item do Cardápio')
+        verbose_name_plural = _('Itens do Cardápio')
         ordering = ['category__order', 'name']
 
     def __str__(self):
@@ -135,7 +135,7 @@ class Customer(models.Model):
 
 class Card(models.Model):
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='cards')
-    number = models.PositiveIntegerField(_('Número do Cartão'))
+    number = models.PositiveIntegerField(_('Número da Comanda'))
     is_active = models.BooleanField(_('Ativo?'), default=True)
 
 
@@ -148,8 +148,8 @@ class Card(models.Model):
     class Meta:
         unique_together = ('id','restaurant', 'number')
         ordering = ['number']
-        verbose_name = _('Cartão')
-        verbose_name_plural = _('Cartões')
+        verbose_name = _('Comanda')
+        verbose_name_plural = _('Comandas')
 
     def __str__(self):
         return f"{self.number} Valor: {sum(item.subtotal() for item in self.card_items.all()):.2f}"
@@ -318,8 +318,8 @@ class CardPayment(models.Model):
     is_paid_today.boolean = True
     is_paid_today.short_description = "Pago hoje?"
     class Meta:
-        verbose_name = _('Recebimento no Cartão')
-        verbose_name_plural = _('Recebimentos nos Cartões')
+        verbose_name = _('Recebimento da Comanda')
+        verbose_name_plural = _('Recebimento das Comandas')
         ordering = ['-paid_at']
 
     def __str__(self):
