@@ -170,6 +170,7 @@ class CardItem(models.Model):
         null=True,
         blank=True
     )
+    is_ready = models.BooleanField(_('Pronto?'), default=False)
 
     class Meta:
         verbose_name = _('Item do Cartão')
@@ -328,8 +329,7 @@ class CardPayment(models.Model):
 
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-
-@receiver(post_save, sender=CardPayment)
+"""@receiver(post_save, sender=CardPayment)
 def atualizar_estoque_ao_receber_pagamento(sender, instance, created, **kwargs):
     if created:  # Só ajusta estoque em novos pagamentos
         card = instance.card
@@ -348,6 +348,27 @@ def atualizar_estoque_ao_receber_pagamento(sender, instance, created, **kwargs):
                     menu_item=menu_item,
                     quantity=-item.quantity  # negativo pela quantidade vendida
                 )
+"""
+
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+@receiver(post_save, sender=OrderItem)
+def baixar_estoque_ao_criar_pedido(sender, instance, created, **kwargs):
+    if created:
+        menu_item = instance.menu_item
+        quantidade = instance.quantity
+        try:
+            stock = menu_item.stock
+            stock.quantity -= quantidade
+            stock.save()
+        except Stock.DoesNotExist:
+            # Se o item não tiver estoque criado ainda, cria com saldo negativo
+            Stock.objects.create(
+                restaurant=menu_item.restaurant,
+                menu_item=menu_item,
+                quantity=-quantidade
+            )
 
 
 class StockEntry(models.Model):
@@ -396,4 +417,20 @@ def atualizar_estoque_entrada(sender, instance, created, **kwargs):
                 restaurant=menu_item.restaurant,
                 menu_item=menu_item,
                 quantity=quantidade
+            )
+
+@receiver(post_save, sender=CardItem)
+def baixar_estoque_ao_adicionar_item_na_comanda(sender, instance, created, **kwargs):
+    if created:
+        menu_item = instance.menu_item
+        quantidade = instance.quantity
+        try:
+            stock = menu_item.stock
+            stock.quantity -= quantidade
+            stock.save()
+        except Stock.DoesNotExist:
+            Stock.objects.create(
+                restaurant=menu_item.restaurant,
+                menu_item=menu_item,
+                quantity=-quantidade
             )

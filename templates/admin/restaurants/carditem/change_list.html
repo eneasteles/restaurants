@@ -1,0 +1,11 @@
+{% extends "admin/change_list.html" %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <script>
+    setTimeout(function () {
+      window.location.reload();
+    }, 10000); // atualiza a cada 10 segundos
+  </script>
+{% endblock %}
+

@@ -2,12 +2,27 @@
 from django.urls import path
 from . import views
 
+
+
 app_name = 'restaurants'
+
+
+from django.contrib.admin.views.decorators import staff_member_required
+from django.shortcuts import redirect, get_object_or_404
+from .models import CardItem
+
+@staff_member_required
+def marcar_pronto_view(request, pk):
+    item = get_object_or_404(CardItem, pk=pk)
+    item.is_ready = True
+    item.save()
+    return redirect('/admin/restaurants/carditem/')
+
 
 urlpatterns = [
     # home
     path('', views.home, name='home'),
-
+    path('admin/marcar_pronto/<int:pk>/', marcar_pronto_view, name='marcar_pronto'),
     # Dashboard
     path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
 

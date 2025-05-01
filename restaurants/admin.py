@@ -10,6 +10,17 @@ from io import BytesIO
 
 import uuid
 
+from django import forms
+from .models import MenuItem
+
+class MenuItemWithStockLabelChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        try:
+            stock = obj.stock.quantity
+        except:
+            stock = 0
+        return f"{obj.name} (Estoque: {stock})"
+
 def gerar_payload_pix(chave_pix: str, valor: float, nome_recebedor: str, cidade: str, txid: str = None) -> str:
     valor_str = f"{valor:.2f}"
 
@@ -67,6 +78,7 @@ class OrderItemInline(admin.TabularInline):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "menu_item" and not request.user.is_superuser:
             kwargs["queryset"] = MenuItem.objects.filter(restaurant__owner=request.user)
+            return MenuItemWithStockLabelChoiceField(queryset=kwargs["queryset"])
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def subtotal(self, instance):
@@ -310,11 +322,14 @@ class CardItemInline(admin.TabularInline):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "menu_item" and not request.user.is_superuser:
             kwargs["queryset"] = MenuItem.objects.filter(restaurant__owner=request.user)
+            return MenuItemWithStockLabelChoiceField(queryset=kwargs["queryset"])
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def subtotal(self, instance):
         return f"R$ {instance.subtotal():.2f}"
     subtotal.short_description = ('Subtotal')
+
+
 
 class DisponibilidadeCartaoFilter(admin.SimpleListFilter):
     title = 'Disponibilidade'
@@ -576,5 +591,56 @@ class StockEntryAdmin(admin.ModelAdmin):
 
 
 
+from django.contrib import admin
+from .models import CardItem
+
+@admin.register(CardItem)
+class CardItemCozinhaAdmin(admin.ModelAdmin):
+    list_display = ('card_number', 'menu_item', 'quantity', 'is_ready', 'marcar_pronto_link')
+    list_filter = ('card__number',)  # Filtro por número da comanda
+    readonly_fields = ('card', 'menu_item', 'quantity')
+    ordering = ('card__number', 'menu_item__name')  # Ordenação por comanda
+
+    def has_add_permission(self, request): return False
+    def has_delete_permission(self, request, obj=None): return False
+    def has_change_permission(self, request, obj=None): return True
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs.filter(is_ready=False).select_related('card', 'menu_item')
+        return qs.filter(
+            is_ready=False,
+            card__restaurant__owner=request.user
+        ).select_related('card', 'menu_item')
+
+
+    def card_number(self, obj):
+        return f"Comanda {obj.card.number}"
+    card_number.short_description = "Comanda"
+
+    def changelist_view(self, request, extra_context=None):
+        if extra_context is None:
+            extra_context = {}
+        extra_context['refresh_interval'] = 10  # segundos
+        return super().changelist_view(request, extra_context=extra_context)
+
+
+    def marcar_pronto_link(self, obj):
+        if not obj.is_ready:
+            return mark_safe(f'<a class="button" href="/admin/marcar_pronto/{obj.pk}/">Marcar como pronto</a>')
+        return "Pronto"
+    marcar_pronto_link.short_description = "Ação"
+
+from django.contrib.admin.views.decorators import staff_member_required
+from django.shortcuts import redirect, get_object_or_404
+from .models import CardItem
+
+@staff_member_required
+def marcar_pronto_view(request, pk):
+    item = get_object_or_404(CardItem, pk=pk)
+    item.is_ready = True
+    item.save()
+    return redirect('/admin/restaurants/carditem/')  # ou ajuste conforme o nome do app
 
     # (o resto igual que mostrei acima)

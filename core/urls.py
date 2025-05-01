@@ -11,6 +11,13 @@ from core.api import api
 admin.site.site_header = "Administração de Restaurantes"
 admin.site.site_title = "Painel Admin do Restaurantes"
 admin.site.index_title = "Gerenciar Conteúdo do Restaurantes"
+
+
+
+
+
+
+
 urlpatterns = [
     # Admin com logout customizado
     
