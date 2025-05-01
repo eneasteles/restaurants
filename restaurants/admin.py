@@ -481,6 +481,39 @@ class StockAdmin(admin.ModelAdmin):
     list_display = ('menu_item_name', 'quantity')
     search_fields = ('menu_item__name',)
     actions = ['repor_estoque']
+    #########################
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # Superusuário vê tudo
+        if request.user.is_superuser:
+            return qs
+        # Dono vê só suas mesas
+        return qs.filter(restaurant__owner=request.user)
+    
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if not request.user.is_superuser:
+            if db_field.name == "restaurant":
+                kwargs["queryset"] = Restaurant.objects.filter(owner=request.user)
+            elif db_field.name == "table":
+                kwargs["queryset"] = Table.objects.filter(restaurant__owner=request.user)
+            elif db_field.name == "customer":
+                kwargs["queryset"] = Customer.objects.filter(restaurant__owner=request.user)
+            elif db_field.name == "stock":
+                kwargs["queryset"] = Stock.objects.filter(restaurant__owner=request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    
+    def get_fields(self, request, obj=None):
+        fields = super().get_fields(request, obj)
+        if not request.user.is_superuser:
+            fields = [f for f in fields if f != 'restaurant']
+        return fields
+
+    def save_model(self, request, obj, form, change):
+        if not request.user.is_superuser and not obj.restaurant_id:
+            obj.restaurant = Restaurant.objects.filter(owner=request.user).first()
+        super().save_model(request, obj, form, change)
+
+    ####################
 
     def menu_item_name(self, obj):
         return obj.menu_item.name
