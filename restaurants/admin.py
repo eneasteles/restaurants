@@ -199,7 +199,7 @@ class MenuItemAdmin(admin.ModelAdmin):
                 kwargs["queryset"] = Table.objects.filter(restaurant__owner=request.user)
             elif db_field.name == "customer":
                 kwargs["queryset"] = Customer.objects.filter(restaurant__owner=request.user)
-            elif db_field.name == "categoria":
+            elif db_field.name == "category":
                 kwargs["queryset"] = Category.objects.filter(restaurant__owner=request.user)  
             elif db_field.name == "menu_item":
                 kwargs["queryset"] = MenuItem.objects.filter(restaurant__owner=request.user)  
