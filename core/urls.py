@@ -28,6 +28,8 @@ urlpatterns = [
     path("api/", api.urls),
     path('admin/', admin.site.urls),
     path('cupom/<int:payment_id>/', views.gerar_cupom_pdf, name='gerar_cupom'),
+    path('fiscal/', include('fiscal.urls')),
+
     
     # Sistema de autenticação completo
 

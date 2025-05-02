@@ -16,6 +16,10 @@ from .models import MenuItem
 from django.utils.html import format_html
 from django.urls import reverse
 
+from django.urls import reverse
+from django.utils.html import format_html
+from django.contrib import messages
+from fiscal.models import NotaFiscal
 
 class MenuItemWithStockLabelChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
@@ -395,24 +399,35 @@ class CardAdmin(admin.ModelAdmin):
 
 
 
-from django.contrib import admin
-from .models import CardPayment, Restaurant, Card
-from django import forms
 
 
 @admin.register(CardPayment)
 class CardPaymentAdmin(admin.ModelAdmin):
-    list_display = ('card', 'amount', 'payment_method', 'paid_amount', 'change_amount', 'paid_at', 'cupom_link')
+    list_display = ('id','restaurant','card', 'amount', 'payment_method', 'paid_amount', 'change_amount',  'cupom_link', 'nota_fiscal_emitida', 'emitir_nfce_link','paid_at')
     list_filter = ('payment_method', 'paid_at')
     search_fields = ('card__number', 'restaurant__name')
     readonly_fields = ('amount', 'change_amount', 'paid_at','qrcode_pix')
     
-    
+    def nota_fiscal_emitida(self, obj):
+        return hasattr(obj, 'nota_fiscal')
+    nota_fiscal_emitida.boolean = True
+    nota_fiscal_emitida.short_description = "NFC-e Emitida?"
+
+    def emitir_nfce_link(self, obj):
+        if hasattr(obj, 'nota_fiscal'):
+            return format_html('<a href="{}" target="_blank">Ver NFC-e</a>',
+                reverse('admin:fiscal_notafiscal_change', args=[obj.nota_fiscal.id])
+            )
+        return format_html(
+            '<a class="button" href="{}">Emitir NFC-e</a>',
+            reverse('emitir_nfce', args=[obj.pk])
+        )
+    emitir_nfce_link.short_description = "Emitir o NFC-e"
     
     def cupom_link(self, obj):
         url = reverse('gerar_cupom', args=[obj.id])
-        return format_html('<a class="button" href="{}" target="_blank">Gerar Cupom</a>', url)
-    cupom_link.short_description = "Cupom"
+        return format_html('<a class="button" href="{}" target="_blank">CUPOM DE VENDA</a>', url)
+    cupom_link.short_description = "EMITIR CUPOM DE VENDA"
     cupom_link.allow_tags = True
 
     def get_fields(self, request, obj=None):
@@ -655,4 +670,7 @@ def marcar_pronto_view(request, pk):
     item.save()
     return redirect('/admin/restaurants/carditem/')  # ou ajuste conforme o nome do app
 
+
     # (o resto igual que mostrei acima)
+
+

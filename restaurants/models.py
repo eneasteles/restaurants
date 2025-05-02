@@ -9,40 +9,63 @@ from django.utils.timezone import localdate
 
 User = get_user_model()
 
-class Restaurant(models.Model):    
+
+
+class Restaurant(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='restaurante')
-    name = models.CharField(_('Nome'), max_length=100)
+    name = models.CharField(_('Name'), max_length=100)
     slug = models.SlugField(_('Slug'), unique=True)
-    chave_pix = models.CharField(_('Chave Pix'), max_length=100, blank=True)
-    address = models.TextField(_('Endereço'))
-    phone = models.CharField(_('Telefone'), max_length=20)
-    email = models.EmailField(_('E-mail'))
+    chave_pix = models.CharField(_('Pix Key'), max_length=100, blank=True)
+
+    address = models.TextField(_('Full Address'))
+    street = models.CharField(_('Street'), max_length=255, blank=True)
+    number = models.CharField(_('Number'), max_length=20, blank=True)
+    neighborhood = models.CharField(_('Neighborhood'), max_length=100, blank=True)
+    city = models.CharField(_('City'), max_length=100, blank=True)
+    state = models.CharField(_('State'), max_length=2, blank=True)
+    zip_code = models.CharField(_('ZIP Code'), max_length=10, blank=True)
+
+    phone = models.CharField(_('Phone'), max_length=20)
+    email = models.EmailField(_('Email'))
     logo = models.ImageField(_('Logo'), upload_to='restaurant_logos/', null=True, blank=True)
-    is_active = models.BooleanField(_('Ativo'), default=True)
-    created_at = models.DateTimeField(_('Criado em'), auto_now_add=True)
-    updated_at = models.DateTimeField(_('Atualizado em'), auto_now=True)
 
+    is_active = models.BooleanField(_('Active'), default=True)
+    emit_nfce = models.BooleanField(_('Emit Fiscal Invoice (NFC-e)?'), default=False)
 
-    
+    cnpj = models.CharField(_('CNPJ'), max_length=14, blank=True)
+    state_registration = models.CharField(_('State Registration'), max_length=20, blank=True)
+    tax_regime = models.CharField(_('Tax Regime'), max_length=20, choices=[
+        ('1', 'Simples Nacional'),
+        ('2', 'Simples Excesso Sublimite'),
+        ('3', 'Regime Normal'),
+    ], default='1', blank=True)
+
+    certificate_file = models.FileField(_('Digital Certificate (.pfx)'), upload_to='certificates/', null=True, blank=True)
+    certificate_password = models.CharField(_('Certificate Password'), max_length=100, blank=True)
+    csc = models.CharField(_('CSC'), max_length=50, blank=True)
+    csc_id = models.CharField(_('CSC ID'), max_length=10, blank=True)
+
+    created_at = models.DateTimeField(_('Created At'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('Updated At'), auto_now=True)
+
     class Meta:
-        verbose_name = _('Restaurante')
-        verbose_name_plural = _('Restaurantes')
+        verbose_name = _('Restaurant')
+        verbose_name_plural = _('Restaurants')
         ordering = ['name']
 
     def __str__(self):
         return self.name
-    
+
     def clean(self):
         super().clean()
 
+        # Validação da chave Pix
         if self.chave_pix:
             chave = self.chave_pix.strip()
-
-            # Regex para validar
             padrao_email = r"^[\w\.-]+@[\w\.-]+\.\w+$"
-            padrao_telefone = r"^\+55\d{11}$"  # Exemplo: +5511999999999
-            padrao_cpf = r"^\d{11}$"           # Só números, 11 dígitos
-            padrao_cnpj = r"^\d{14}$"          # Só números, 14 dígitos
+            padrao_telefone = r"^\+55\d{11}$"
+            padrao_cpf = r"^\d{11}$"
+            padrao_cnpj = r"^\d{14}$"
             padrao_uuid = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 
             if not (
@@ -53,7 +76,31 @@ class Restaurant(models.Model):
                 re.match(padrao_uuid, chave)
             ):
                 raise ValidationError({
-                    'chave_pix': "Chave Pix inválida. Deve ser um e-mail, telefone (+55...), CPF, CNPJ ou chave aleatória."
+                    'chave_pix': _("Invalid Pix key. Must be email, phone (+55...), CPF, CNPJ or UUID.")
+                })
+
+        # 🔐 Validação dos dados fiscais apenas se emitir NFC-e
+        if self.emit_nfce:
+            campos_fiscais = {
+                'cnpj': self.cnpj,
+                'state': self.state,
+                'city': self.city,
+                'zip_code': self.zip_code,
+                'street': self.street,
+                'number': self.number,
+                'neighborhood': self.neighborhood,
+                'state_registration': self.state_registration,
+                'tax_regime': self.tax_regime,
+                'certificate_file': self.certificate_file,
+                'certificate_password': self.certificate_password,
+                'csc': self.csc,
+                'csc_id': self.csc_id,
+            }
+
+            campos_vazios = [campo for campo, valor in campos_fiscais.items() if not valor]
+            if campos_vazios:
+                raise ValidationError({
+                    campo: _('Required for NFC-e emission.') for campo in campos_vazios
                 })
 
 class Table(models.Model):
@@ -287,9 +334,9 @@ class CardPayment(models.Model):
     restaurant = models.ForeignKey('Restaurant', on_delete=models.CASCADE, related_name='card_payments')
     card = models.ForeignKey('Card', on_delete=models.CASCADE, related_name='payments')
     amount = models.DecimalField(_('Valor pago'), max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
-    payment_method = models.CharField(_('Forma de pagamento'), max_length=2, choices=PaymentMethod.choices)
-    paid_amount = models.DecimalField(_('Valor recebido em dinheiro'), max_digits=10, decimal_places=2, null=True, blank=True)
-    change_amount = models.DecimalField(_('Troco a devolver'), max_digits=10, decimal_places=2, null=True, blank=True)
+    payment_method = models.CharField(_('Forma Pagamento'), max_length=2, choices=PaymentMethod.choices)
+    paid_amount = models.DecimalField(_('Recebido em Dinheiro'), max_digits=10, decimal_places=2, null=True, blank=True)
+    change_amount = models.DecimalField(_('Troco'), max_digits=10, decimal_places=2, null=True, blank=True)
     paid_at = models.DateTimeField(_('Pago em'), auto_now_add=True)
     notes = models.TextField(_('Observações'), blank=True)
 
