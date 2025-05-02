@@ -1,7 +1,7 @@
 from django.utils.safestring import mark_safe
 
 from django.contrib import admin
-from .models import Restaurant, Table, Category, MenuItem, Order, OrderItem, Customer, Card, CardItem, Stock
+from .models import Restaurant, Table, Category, MenuItem, Order, OrderItem, Customer, Card, CardItem, Stock,CardPayment
 from django.utils.timezone import localdate
 
 import qrcode
@@ -12,6 +12,10 @@ import uuid
 
 from django import forms
 from .models import MenuItem
+
+from django.utils.html import format_html
+from django.urls import reverse
+
 
 class MenuItemWithStockLabelChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
@@ -398,10 +402,18 @@ from django import forms
 
 @admin.register(CardPayment)
 class CardPaymentAdmin(admin.ModelAdmin):
-    list_display = ('card', 'amount', 'payment_method', 'paid_amount', 'change_amount', 'paid_at')
+    list_display = ('card', 'amount', 'payment_method', 'paid_amount', 'change_amount', 'paid_at', 'cupom_link')
     list_filter = ('payment_method', 'paid_at')
     search_fields = ('card__number', 'restaurant__name')
     readonly_fields = ('amount', 'change_amount', 'paid_at','qrcode_pix')
+    
+    
+    
+    def cupom_link(self, obj):
+        url = reverse('gerar_cupom', args=[obj.id])
+        return format_html('<a class="button" href="{}" target="_blank">Gerar Cupom</a>', url)
+    cupom_link.short_description = "Cupom"
+    cupom_link.allow_tags = True
 
     def get_fields(self, request, obj=None):
         fields = super().get_fields(request, obj)

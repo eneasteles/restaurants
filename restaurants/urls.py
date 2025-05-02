@@ -23,6 +23,7 @@ urlpatterns = [
     # home
     path('', views.home, name='home'),
     path('admin/marcar_pronto/<int:pk>/', marcar_pronto_view, name='marcar_pronto'),
+    
     # Dashboard
     path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
 

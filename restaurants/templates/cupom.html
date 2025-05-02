@@ -1,0 +1,13 @@
+<h2>CUPOM DE VENDA</h2>
+<p><strong>Restaurante:</strong> {{ pagamento.restaurant.name }}</p>
+<p><strong>Data:</strong> {{ pagamento.paid_at }}</p>
+<p><strong>Cartão:</strong> {{ pagamento.card.number }}</p>
+<hr>
+<ul>
+{% for item in itens %}
+    <li>{{ item.menu_item.name }} x{{ item.quantity }} — R$ {{ item.subtotal|floatformat:2 }}</li>
+{% endfor %}
+</ul>
+<hr>
+<p><strong>Total:</strong> R$ {{ pagamento.amount|floatformat:2 }}</p>
+<p><strong>Forma de Pagamento:</strong> {{ pagamento.get_payment_method_display }}</p>

@@ -174,3 +174,24 @@ def relatorio_recebimentos(request):
 
 def home(request):
     return render(request, 'restaurants/home.html')
+
+from django.http import HttpResponse
+from django.template.loader import render_to_string
+from weasyprint import HTML
+
+
+def gerar_cupom_pdf(request, payment_id):
+    pagamento = CardPayment.objects.select_related('card', 'restaurant').get(id=payment_id)
+    itens = pagamento.card.card_items.all()
+
+    html_string = render_to_string('cupom.html', {
+        'pagamento': pagamento,
+        'itens': itens,
+    })
+
+    pdf_file = HTML(string=html_string).write_pdf()
+
+    response = HttpResponse(pdf_file, content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="cupom_{payment_id}.pdf"'
+    return response
+
