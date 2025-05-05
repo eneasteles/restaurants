@@ -9,6 +9,14 @@ from django.utils.timezone import localdate
 
 User = get_user_model()
 
+from django.utils.crypto import get_random_string
+from django.utils.timezone import localdate
+
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.utils.crypto import get_random_string
+
+
 
 
 class Restaurant(models.Model):
@@ -47,6 +55,17 @@ class Restaurant(models.Model):
 
     created_at = models.DateTimeField(_('Created At'), auto_now_add=True)
     updated_at = models.DateTimeField(_('Updated At'), auto_now=True)
+
+    codigo_diario = models.CharField(max_length=20, blank=True)
+
+    def gerar_codigo_diario(self):
+        # Gera código no formato RST-AAAA-MM-DD-XYZ
+        hoje = localdate()
+        base = f"{self.id}-{hoje.isoformat()}"
+        aleatorio = get_random_string(length=6)
+        self.codigo_diario = f"{base}-{aleatorio}"
+        self.save()
+        return self.codigo_diario
 
     class Meta:
         verbose_name = _('Restaurant')
@@ -481,3 +500,14 @@ def baixar_estoque_ao_adicionar_item_na_comanda(sender, instance, created, **kwa
                 menu_item=menu_item,
                 quantity=-quantidade
             )
+
+
+
+
+@receiver(post_save, sender=Restaurant)
+def gerar_codigo_ao_criar_restaurante(sender, instance, created, **kwargs):
+    if created and not instance.codigo_diario:
+        hoje = localdate()
+        aleatorio = get_random_string(length=6)
+        instance.codigo_diario = f"{instance.id}-{hoje.isoformat()}-{aleatorio}"
+        instance.save()

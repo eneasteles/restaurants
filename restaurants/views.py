@@ -195,3 +195,4 @@ def gerar_cupom_pdf(request, payment_id):
     response['Content-Disposition'] = f'inline; filename="cupom_{payment_id}.pdf"'
     return response
 
+
