@@ -19,7 +19,7 @@ def main(page: ft.Page):
 
     def carregar_menu_items():
         try:
-            response = requests.get(f"{API_BASE}/menu-items/", params={"codigo": codigo_input.value})
+            response = requests.get(f"{API_BASE}/menu-items/", params={"codigo": codigo_input.value.strip()})
             if response.status_code == 200:
                 dados = response.json().get("items", [])
                 menu_items_dropdown.options = [
@@ -32,9 +32,9 @@ def main(page: ft.Page):
         aviso.value = ""
         cards_container.controls.clear()
         try:
-            r = requests.get(f"{API_BASE}/cards/", params={"codigo": codigo_input.value})
+            r = requests.get(f"{API_BASE}/cards/", params={"codigo": codigo_input.value.strip()})
             if r.status_code != 200:
-                aviso.value = "Código inválido."
+                aviso.value = "Código inválido. 23"
                 page.update()
                 return
             cards = r.json().get("cards", [])
@@ -68,8 +68,8 @@ def main(page: ft.Page):
         try:
             r = requests.post(
                 f"{API_BASE}/cards/abrir/",
-                params={"codigo": codigo_input.value},
-                json={"number": int(nova_comanda_input.value)}
+                params={"codigo": codigo_input.value.strip()},
+                json={"number": int(nova_comanda_input.value.strip())}
             )
             if r.status_code == 200:
                 nova_comanda_input.value = ""
@@ -93,7 +93,7 @@ def main(page: ft.Page):
             }
             r = requests.post(
                 f"{API_BASE}/cards/adicionar-item/",
-                params={"codigo": codigo_input.value},
+                params={"codigo": codigo_input.value.strip()},
                 json=payload
             )
             if r.status_code == 200:

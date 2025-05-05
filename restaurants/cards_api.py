@@ -25,7 +25,7 @@ def listar_comandas(request):
     try:
         restaurante = Restaurant.objects.get(codigo_diario=codigo)
     except Restaurant.DoesNotExist:
-        return {"error": "Código inválido"}, 404
+        return {"error": "Código inválido 3"}, 404
 
 
     cards = Card.objects.filter(restaurant=restaurante, is_active=True).order_by("number")
@@ -60,12 +60,11 @@ def abrir_comanda(request, data: NovaComandaSchema):
     try:
         restaurante = Restaurant.objects.get(codigo_diario=codigo)
     except Restaurant.DoesNotExist:
-        return {"error": "Código inválido"}, 404
+        return {"error": "Código inválido aqui 1"}, 404
 
-    card = Card.objects.create(restaurant=restaurante, number=data.number)
-    
-
+    card = Card.objects.create(restaurant=restaurante, number=data.number, is_active=True )
     return {"success": True, "card_id": card.id}
+
 
 # POST /api/cards/adicionar-item/?codigo=...
 @card_router.post("/cards/adicionar-item/")
@@ -77,7 +76,7 @@ def adicionar_item(request, data: AdicionarItemSchema):
     try:
         restaurante = Restaurant.objects.get(codigo_diario=codigo)
     except Restaurant.DoesNotExist:
-        return {"error": "Código inválido"}, 404
+        return {"error": "Código inválido 2"}, 404
 
     card = get_object_or_404(Card, id=data.card_id, restaurant=restaurante)
     menu_item = get_object_or_404(MenuItem, id=data.menu_item_id, restaurant=restaurante)

@@ -203,6 +203,7 @@ class Card(models.Model):
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='cards')
     number = models.PositiveIntegerField(_('Número da Comanda'))
     is_active = models.BooleanField(_('Ativo?'), default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
 
