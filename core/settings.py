@@ -1,4 +1,4 @@
-
+from datetime import timedelta
 
 from pathlib import Path
 
@@ -30,8 +30,23 @@ INSTALLED_APPS = [
     'restaurants',
     'cashier',
     'fiscal',
+    'rest_framework',
+    'rest_framework_simplejwt',
+    'ninja',
+    'api',
 ]
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    )
+}
 
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}
+APPEND_SLASH = False  # Evita redirecionamentos para URLs com barra
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

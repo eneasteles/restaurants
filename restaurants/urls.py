@@ -21,8 +21,6 @@ def marcar_pronto_view(request, pk):
 urlpatterns = [
     # home
     path('', views.home, name='home'),
-    
-    
 
     path('admin/marcar_pronto/<int:pk>/', marcar_pronto_view, name='marcar_pronto'),
     

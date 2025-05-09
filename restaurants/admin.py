@@ -1,7 +1,7 @@
 from django.utils.safestring import mark_safe
 
 from django.contrib import admin
-from .models import Restaurant, Table, Category, MenuItem, Order, OrderItem, Customer, Card, CardItem, Stock,CardPayment
+from .models import Restaurant, Table, Category, MenuItem, Order, OrderItem, Customer, Card, CardItem, Stock,CardPayment, RestaurantUser
 from django.utils.timezone import localdate
 
 import qrcode
@@ -593,7 +593,24 @@ class StockEntryItemInline(admin.TabularInline):
                 kwargs["queryset"] = MenuItem.objects.filter(restaurant__owner=request.user)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+@admin.register(RestaurantUser)
+class RestaurantUserAdmin(admin.ModelAdmin):
+    list_display = ('user', 'restaurant', 'role')
+    search_fields = ('user__username', 'restaurant__name')
+    list_filter = ('role',)
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # Superusuário vê tudo
+        if request.user.is_superuser:
+            return qs
+        # Dono vê só suas mesas
+        return qs.filter(restaurant__owner=request.user)
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if not request.user.is_superuser:
+            if db_field.name == "restaurant":
+                kwargs["queryset"] = Restaurant.objects.filter(owner=request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 @admin.register(StockEntry)
 class StockEntryAdmin(admin.ModelAdmin):

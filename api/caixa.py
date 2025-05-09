@@ -1,6 +1,5 @@
 import flet as ft
-
-from decimal import Decimal, InvalidOperation  # Adicione esta linha
+from decimal import Decimal
 import requests
 from requests.exceptions import RequestException
 import base64
@@ -21,39 +20,30 @@ def main(page: ft.Page):
 
     # Função de login
     def login(username, password):
-        print(f"Tentando login com usuário: {username}")
         try:
             response = requests.post(f"{API_BASE_URL}token/", data={"username": username, "password": password})
-            print(f"Resposta do /api/token/: {response.status_code}, {response.text}")
             response.raise_for_status()
             data = response.json()
             token = data.get("access")
-            print(f"Token obtido: {token[:10]}...")
-            headers = {"Authorization": f"Bearer {token}"}
-            print(f"Enviando requisição para /api/user-profile com headers: {headers}")
-            user_response = requests.get(f"{API_BASE_URL}user-profile", headers=headers)
-            print(f"Resposta do /api/user-profile: {user_response.status_code}, {user_response.text}")
+            user_response = requests.get(f"{API_BASE_URL}user-profile", headers={"Authorization": f"Bearer {token}"})
             user_response.raise_for_status()
             profile = user_response.json()
-            print("Login bem-sucedido:", profile)
-            return headers, profile["restaurant_id"], None
+            return {"Authorization": f"Bearer {token}"}, profile["restaurant_id"]
         except RequestException as e:
-            print(f"Erro no login: {str(e)}")
             return None, None, str(e)
 
     # Tela de autenticação
     def show_login_screen():
-        print("Exibindo tela de login")
         username_field = ft.TextField(
             label="Usuário",
-            prefix_icon=ft.Icons.PERSON,
+            prefix_icon=ft.icons.PERSON,
             width=300,
             border_radius=10,
             border_color=ft.Colors.GREY_400,
         )
         password_field = ft.TextField(
             label="Senha",
-            prefix_icon=ft.Icons.LOCK,
+            prefix_icon=ft.icons.LOCK,
             password=True,
             can_reveal_password=True,
             width=300,
@@ -64,7 +54,6 @@ def main(page: ft.Page):
         loading = ft.ProgressRing(visible=False, width=24, height=24)
 
         def handle_login(e):
-            print("Botão Entrar clicado")
             error_message.visible = False
             loading.visible = True
             page.update()
@@ -80,15 +69,13 @@ def main(page: ft.Page):
             loading.visible = False
 
             if headers and restaurant_id:
-                # Atualização CORRETA por referência:
-                HEADERS.clear()
-                HEADERS.update(headers)  # Atualiza o dicionário existente
+                global HEADERS, RESTAURANT_ID
+                HEADERS = headers
                 RESTAURANT_ID = restaurant_id
-        
                 page.controls.clear()
                 show_main_interface()
             else:
-                error_message.value = f"Erro de autenticação: {error or 'Verifique suas credenciais ou conexão com o servidor.'}"
+                error_message.value = "Credenciais inválidas ou erro de conexão." if not error else f"Erro: {error}"
                 error_message.visible = True
             page.update()
 
@@ -157,81 +144,63 @@ def main(page: ft.Page):
 
     # Funções para chamadas à API
     def fetch_comandas():
-        page.client_storage.remove("comandas")  
-        print("Buscando comandas...")
-        print(f"DEBUG - HEADERS enviados: {HEADERS}")  # Adicione esta linha
         comandas = page.client_storage.get("comandas")
         if comandas:
-            print("Comandas do cache:", comandas)
             return comandas
-        print(f"Headers sendo enviados para /cards: {HEADERS}")  # Adicione esta linha
         try:
             response = requests.get(f"{API_BASE_URL}cards", headers=HEADERS)
-            print(f"Resposta do /api/cards: {response.status_code}, {response.text}")
             response.raise_for_status()
             comandas = response.json()
             page.client_storage.set("comandas", comandas)
             return comandas
         except RequestException as e:
-            print(f"Erro ao buscar comandas: {str(e)}")
             page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao buscar comandas: {str(e)}"))
             page.snack_bar.open = True
             page.update()
             return []
 
     def fetch_menu_items():
-        print("Buscando itens do cardápio...")
         menu_items = page.client_storage.get("menu_items")
         if menu_items:
-            print("Itens do cache:", menu_items)
             return menu_items
         try:
             response = requests.get(f"{API_BASE_URL}menu-items", headers=HEADERS)
-            print(f"Resposta do /api/menu-items: {response.status_code}, {response.text}")
             response.raise_for_status()
             menu_items = response.json()
             page.client_storage.set("menu_items", menu_items)
             return menu_items
         except RequestException as e:
-            print(f"Erro ao buscar itens: {str(e)}")
             page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao buscar itens do cardápio: {str(e)}"))
             page.snack_bar.open = True
             page.update()
             return []
 
     def add_card_item(card_id, menu_item_id, quantity):
-        print(f"Adicionando item: card_id={card_id}, menu_item_id={menu_item_id}, quantity={quantity}")
         try:
             data = {"menu_item_id": menu_item_id, "quantity": quantity}
             response = requests.post(f"{API_BASE_URL}cards/{card_id}/items", json=data, headers=HEADERS)
-            print(f"Resposta do /api/cards/{card_id}/items: {response.status_code}, {response.text}")
             response.raise_for_status()
             page.client_storage.remove("comandas")  # Invalidar cache
             return response.json()
         except RequestException as e:
-            print(f"Erro ao adicionar item: {str(e)}")
             page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao adicionar item: {str(e)}"))
             page.snack_bar.open = True
             page.update()
             return None
 
     def delete_card_item(card_id, item_id):
-        print(f"Removendo item: card_id={card_id}, item_id={item_id}")
         try:
             response = requests.delete(f"{API_BASE_URL}cards/{card_id}/items/{item_id}", headers=HEADERS)
-            print(f"Resposta do /api/cards/{card_id}/items/{item_id}: {response.status_code}, {response.text}")
             response.raise_for_status()
             page.client_storage.remove("comandas")  # Invalidar cache
             return True
         except RequestException as e:
-            print(f"Erro ao remover item: {str(e)}")
             page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao remover item: {str(e)}"))
             page.snack_bar.open = True
             page.update()
             return False
 
     def create_payment(card_id, payment_method, paid_amount=None, notes=""):
-        print(f"Registrando pagamento: card_id={card_id}, payment_method={payment_method}, paid_amount={paid_amount}")
         try:
             data = {
                 "card_id": card_id,
@@ -240,17 +209,14 @@ def main(page: ft.Page):
                 "notes": notes
             }
             response = requests.post(f"{API_BASE_URL}card-payments", json=data, headers=HEADERS)
-            print(f"Resposta do /api/card-payments: {response.status_code}, {response.text}")
             response.raise_for_status()
             payment = response.json()
             # Obter recibo PDF
             receipt_response = requests.get(f"{API_BASE_URL}card-payments/{payment['card_id']}/receipt", headers=HEADERS)
-            print(f"Resposta do /api/card-payments/{payment['card_id']}/receipt: {receipt_response.status_code}")
             receipt_response.raise_for_status()
             page.client_storage.remove("comandas")  # Invalidar cache
             return payment, receipt_response.content
         except RequestException as e:
-            print(f"Erro ao registrar pagamento: {str(e)}")
             page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao registrar pagamento: {str(e)}"))
             page.snack_bar.open = True
             page.update()
@@ -258,7 +224,6 @@ def main(page: ft.Page):
 
     # Interface principal
     def show_main_interface():
-        print("Exibindo interface principal")
         comandas = fetch_comandas()
         menu_items = fetch_menu_items()
 
@@ -322,18 +287,15 @@ def main(page: ft.Page):
             return total
 
         def atualizar_tabela_comanda():
-            print("Atualizando tabela de comanda")
             comanda_table.rows.clear()
             total_comanda = 0
             if comanda_dropdown.value:
                 comanda_id = int(comanda_dropdown.value.split("ID: ")[1].strip(")"))
                 try:
                     response = requests.get(f"{API_BASE_URL}cards/{comanda_id}", headers=HEADERS)
-                    print(f"Resposta do /api/cards/{comanda_id}: {response.status_code}, {response.text}")
                     response.raise_for_status()
                     comanda = response.json()
                 except RequestException as e:
-                    print(f"Erro ao buscar comanda: {str(e)}")
                     page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao buscar comanda: {str(e)}"))
                     page.snack_bar.open = True
                     page.update()
@@ -345,11 +307,11 @@ def main(page: ft.Page):
                             cells=[
                                 ft.DataCell(ft.Text(item["menu_item"]["name"])),
                                 ft.DataCell(ft.Text(str(item["quantity"]))),
-                                ft.DataCell(ft.Text(f"R$ {float(item['price']):.2f}")),
-                                ft.DataCell(ft.Text(f"R$ {float(item['subtotal']):.2f}")),
+                                ft.DataCell(ft.Text(f"R$ {item['price']:.2f}")),
+                                ft.DataCell(ft.Text(f"R$ {item['subtotal']:.2f}")),
                                 ft.DataCell(
                                     ft.IconButton(
-                                        icon=ft.Icons.DELETE,
+                                        icon=ft.icons.DELETE,
                                         tooltip="Remover",
                                         on_click=lambda e, item_id=item["id"]: handle_delete_item(comanda_id, item_id)
                                     )
@@ -357,13 +319,12 @@ def main(page: ft.Page):
                             ]
                         )
                     )
-                total_comanda = sum(float(item['subtotal']) for item in comanda["card_items"])
-            total_comanda_text.value = f"Total: R$ {total_comanda:.2f}"            
+                total_comanda = calcular_totais(comanda)
+            total_comanda_text.value = f"Total: R$ {total_comanda:.2f}"
             calcular_troco()
             page.update()
 
         def handle_delete_item(card_id, item_id):
-            print(f"Chamando handle_delete_item: card_id={card_id}, item_id={item_id}")
             loading.visible = True
             page.update()
             if delete_card_item(card_id, item_id):
@@ -374,7 +335,6 @@ def main(page: ft.Page):
             page.update()
 
         def adicionar_item(e):
-            print("Botão Adicionar Item clicado")
             if not comanda_dropdown.value:
                 page.snack_bar = ft.SnackBar(ft.Text("Selecione uma comanda primeiro!"))
                 page.snack_bar.open = True
@@ -412,7 +372,6 @@ def main(page: ft.Page):
             page.update()
 
         def atualizar_visibilidade_valor_recebido():
-            print("Atualizando visibilidade do valor recebido")
             valor_recebido.visible = metodo_pagamento.value == "CA"
             troco_text.visible = metodo_pagamento.value == "CA"
             if not valor_recebido.visible:
@@ -422,27 +381,23 @@ def main(page: ft.Page):
             page.update()
 
         def calcular_troco():
-            print("Calculando troco")
             if metodo_pagamento.value == "CA" and valor_recebido.value and comanda_dropdown.value:
                 try:
                     valor_recebido_decimal = Decimal(valor_recebido.value.replace(",", "."))
                     comanda_id = int(comanda_dropdown.value.split("ID: ")[1].strip(")"))
-                    response = requests.get(f"{API_BASE_URL}cards/{comanda_id}/", headers=HEADERS)
-                    print(f"Resposta do /api/cards/{comanda_id} (calcular_troco): {response.status_code}, {response.text}")
+                    response = requests.get(f"{API_BASE_URL}cards/{comanda_id}", headers=HEADERS)
                     response.raise_for_status()
                     comanda = response.json()
-                    total_comanda = sum(float(item['subtotal']) for item in comanda["card_items"])
+                    total_comanda = calcular_totais(comanda)
                     troco = valor_recebido_decimal - total_comanda
                     troco_text.value = f"Troco: R$ {troco:.2f}" if troco >= 0 else "Valor insuficiente!"
-                
-                except (ValueError, InvalidOperation, RequestException):
+                except (ValueError, Decimal.InvalidOperation, RequestException):
                     troco_text.value = "Troco: R$ 0.00"
             else:
                 troco_text.value = "Troco: R$ 0.00"
             page.update()
 
         def confirmar_pagamento(e):
-            print("Botão Confirmar Pagamento clicado")
             if not comanda_dropdown.value or not metodo_pagamento.value:
                 page.snack_bar = ft.SnackBar(ft.Text("Selecione a comanda e o método de pagamento!"))
                 page.snack_bar.open = True
@@ -450,8 +405,7 @@ def main(page: ft.Page):
                 return
 
             comanda_id = int(comanda_dropdown.value.split("ID: ")[1].strip(")"))
-            response = requests.get(f"{API_BASE_URL}cards/{comanda_id}/", headers=HEADERS)
-            print(f"Resposta do /api/cards/{comanda_id} (confirmar_pagamento): {response.status_code}, {response.text}")
+            response = requests.get(f"{API_BASE_URL}cards/{comanda_id}", headers=HEADERS)
             response.raise_for_status()
             comanda = response.json()
             total_comanda = calcular_totais(comanda)
@@ -561,6 +515,7 @@ def main(page: ft.Page):
         page.controls.clear()
         page.add(main_layout)
 
+    # Iniciar com a tela de login
     show_login_screen()
 
 ft.app(target=main)

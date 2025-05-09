@@ -121,6 +121,26 @@ class Restaurant(models.Model):
                 raise ValidationError({
                     campo: _('Required for NFC-e emission.') for campo in campos_vazios
                 })
+class RestaurantUser(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='restaurant_users')
+    restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='restaurant_users')
+    role = models.CharField(max_length=20, choices=[
+        ('owner', 'Dono'),
+        ('cashier', 'Caixa'),
+        ('waiter', 'Garçom'),
+    ], default='cashier')
+
+    class Meta:
+        verbose_name = _('Usuário do Restaurante')
+        verbose_name_plural = _('Usuários do Restaurante')
+        unique_together = ('user', 'restaurant')
+        indexes = [
+            models.Index(fields=['user', 'restaurant']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.restaurant.name} ({self.get_role_display()})"
+
 
 class Table(models.Model):
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name='tables', verbose_name='Restaurante')
@@ -213,6 +233,9 @@ class Card(models.Model):
         return self.payments.filter(paid_at__date=today).exists()
 
     class Meta:
+
+        indexes = [
+            models.Index(fields=['restaurant', 'is_active']),    ]
         unique_together = ('id','restaurant', 'number')
         ordering = ['number']
         verbose_name = _('Comanda')
