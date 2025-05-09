@@ -10,16 +10,18 @@ from ninja import NinjaAPI
 from restaurants.api import kitchen_router
 from restaurants.cards_api import card_router 
 from restaurants.menu_api import menu_router
-
+from restaurants.payments_api import payment_router
 api = NinjaAPI()
 
 
 api.add_router("/", menu_router)
 
+# restaurants/api_unificado.py
+
+api.add_router("/", payment_router)
 
 api.add_router("/", kitchen_router)
 api.add_router("/", card_router) 
-
 
 
 

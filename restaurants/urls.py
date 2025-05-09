@@ -18,10 +18,12 @@ def marcar_pronto_view(request, pk):
     item.save()
     return redirect('/admin/restaurants/carditem/')
 
-
 urlpatterns = [
     # home
     path('', views.home, name='home'),
+    
+    
+
     path('admin/marcar_pronto/<int:pk>/', marcar_pronto_view, name='marcar_pronto'),
     
     # Dashboard
