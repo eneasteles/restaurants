@@ -113,13 +113,17 @@ def create_payment(request, payload: CardPaymentCreateSchema):
         return api.create_response(request, {"error": "Autenticação necessária"}, status=401)
     restaurant, _ = get_user_restaurant_and_role(user)
     card = get_object_or_404(Card, id=payload.card_id, restaurant=restaurant)
+    print(f"Criando pagamento para card_id={payload.card_id}, restaurant_id={restaurant.id}")
     try:
         payment = CardPayment.objects.create(
             card=card,
+            restaurant=restaurant,  # Adicione esta linha
             payment_method=payload.payment_method,
             paid_amount=payload.paid_amount,
             notes=payload.notes
         )
+        card.is_active = False
+        card.save()
         return {
             "card_id": payment.card.id,
             "payment_method": payment.payment_method,

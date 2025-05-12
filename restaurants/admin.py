@@ -365,7 +365,7 @@ class DisponibilidadeCartaoFilter(admin.SimpleListFilter):
 
 @admin.register(Card)
 class CardAdmin(admin.ModelAdmin):
-    list_display = ('id', 'number', 'is_active', 'total_display', 'status_display')
+    list_display = ('id', 'number', 'is_active', 'total_display', 'status_display', 'created_at')
     list_filter = ('number', 'is_active', DisponibilidadeCartaoFilter)
     readonly_fields = ('total_display',)
 

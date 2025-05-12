@@ -1,10 +1,9 @@
 import flet as ft
-
-from decimal import Decimal, InvalidOperation  # Adicione esta linha
+from decimal import Decimal, InvalidOperation
 import requests
 from requests.exceptions import RequestException
 import base64
-from io import BytesIO
+import threading
 
 def main(page: ft.Page):
     page.title = "Caixa do Restaurante - Pagamentos"
@@ -27,9 +26,14 @@ def main(page: ft.Page):
             print(f"Resposta do /api/token/: {response.status_code}, {response.text}")
             response.raise_for_status()
             data = response.json()
-            token = data.get("access")
-            print(f"Token obtido: {token[:10]}...")
-            headers = {"Authorization": f"Bearer {token}"}
+            access_token = data.get("access")
+            refresh_token = data.get("refresh")
+            if not access_token or not refresh_token:
+                raise RequestException("Resposta da API não contém access_token ou refresh_token")
+            page.client_storage.set("access_token", access_token)
+            page.client_storage.set("refresh_token", refresh_token)
+            print(f"Token obtido: {access_token[:10]}...")
+            headers = {"Authorization": f"Bearer {access_token}"}
             print(f"Enviando requisição para /api/user-profile com headers: {headers}")
             user_response = requests.get(f"{API_BASE_URL}user-profile", headers=headers)
             print(f"Resposta do /api/user-profile: {user_response.status_code}, {user_response.text}")
@@ -42,7 +46,7 @@ def main(page: ft.Page):
             return None, None, str(e)
 
     # Tela de autenticação
-    def show_login_screen():
+    def show_login_screen(error_message=None):
         print("Exibindo tela de login")
         username_field = ft.TextField(
             label="Usuário",
@@ -60,18 +64,18 @@ def main(page: ft.Page):
             border_radius=10,
             border_color=ft.Colors.GREY_400,
         )
-        error_message = ft.Text("", color=ft.Colors.RED_600, visible=False)
+        error_message_text = ft.Text(error_message, color=ft.Colors.RED_600, visible=bool(error_message))
         loading = ft.ProgressRing(visible=False, width=24, height=24)
 
         def handle_login(e):
             print("Botão Entrar clicado")
-            error_message.visible = False
+            error_message_text.visible = False
             loading.visible = True
             page.update()
 
             if not username_field.value or not password_field.value:
-                error_message.value = "Por favor, preencha usuário e senha."
-                error_message.visible = True
+                error_message_text.value = "Por favor, preencha usuário e senha."
+                error_message_text.visible = True
                 loading.visible = False
                 page.update()
                 return
@@ -80,16 +84,14 @@ def main(page: ft.Page):
             loading.visible = False
 
             if headers and restaurant_id:
-                # Atualização CORRETA por referência:
                 HEADERS.clear()
-                HEADERS.update(headers)  # Atualiza o dicionário existente
+                HEADERS.update(headers)
+                global RESTAURANT_ID
                 RESTAURANT_ID = restaurant_id
-        
-                page.controls.clear()
                 show_main_interface()
             else:
-                error_message.value = f"Erro de autenticação: {error or 'Verifique suas credenciais ou conexão com o servidor.'}"
-                error_message.visible = True
+                error_message_text.value = f"Erro de autenticação: {error or 'Verifique suas credenciais ou conexão com o servidor.'}"
+                error_message_text.visible = True
             page.update()
 
         login_container = ft.Container(
@@ -109,7 +111,7 @@ def main(page: ft.Page):
                     ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
                     username_field,
                     password_field,
-                    error_message,
+                    error_message_text,
                     ft.Row(
                         [
                             ft.ElevatedButton(
@@ -157,26 +159,39 @@ def main(page: ft.Page):
 
     # Funções para chamadas à API
     def fetch_comandas():
-        page.client_storage.remove("comandas")  
+        page.client_storage.remove("comandas")
         print("Buscando comandas...")
-        print(f"DEBUG - HEADERS enviados: {HEADERS}")  # Adicione esta linha
-        comandas = page.client_storage.get("comandas")
-        if comandas:
-            print("Comandas do cache:", comandas)
-            return comandas
-        print(f"Headers sendo enviados para /cards: {HEADERS}")  # Adicione esta linha
+        print(f"DEBUG - HEADERS enviados: {HEADERS}")
         try:
             response = requests.get(f"{API_BASE_URL}cards", headers=HEADERS)
-            print(f"Resposta do /api/cards: {response.status_code}, {response.text}")
+            if response.status_code == 401:
+                print("Token expirado, tentando renovar...")
+                refresh_token = page.client_storage.get("refresh_token")
+                if not refresh_token:
+                    raise RequestException("Nenhum refresh_token disponível. Faça login novamente.")
+                response = requests.post(f"{API_BASE_URL}token/refresh/", json={"refresh": refresh_token})
+                print(f"Resposta do /api/token/refresh/: {response.status_code}, {response.text}")
+                if response.status_code == 200:
+                    data = response.json()
+                    new_access_token = data.get("access")
+                    if not new_access_token:
+                        raise RequestException("Resposta da renovação não contém access_token")
+                    HEADERS["Authorization"] = f"Bearer {new_access_token}"
+                    page.client_storage.set("access_token", new_access_token)
+                    print(f"Novo token obtido: {new_access_token[:10]}...")
+                    response = requests.get(f"{API_BASE_URL}cards", headers=HEADERS)
+                else:
+                    raise RequestException(f"Erro ao renovar token: {response.status_code} {response.text}")
             response.raise_for_status()
             comandas = response.json()
             page.client_storage.set("comandas", comandas)
             return comandas
         except RequestException as e:
             print(f"Erro ao buscar comandas: {str(e)}")
-            page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao buscar comandas: {str(e)}"))
+            page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao buscar comandas: {str(e)}. Faça login novamente."))
             page.snack_bar.open = True
             page.update()
+            show_login_screen(error_message="Sessão expirada. Faça login novamente.")
             return []
 
     def fetch_menu_items():
@@ -206,7 +221,7 @@ def main(page: ft.Page):
             response = requests.post(f"{API_BASE_URL}cards/{card_id}/items", json=data, headers=HEADERS)
             print(f"Resposta do /api/cards/{card_id}/items: {response.status_code}, {response.text}")
             response.raise_for_status()
-            page.client_storage.remove("comandas")  # Invalidar cache
+            page.client_storage.remove("comandas")
             return response.json()
         except RequestException as e:
             print(f"Erro ao adicionar item: {str(e)}")
@@ -221,7 +236,7 @@ def main(page: ft.Page):
             response = requests.delete(f"{API_BASE_URL}cards/{card_id}/items/{item_id}", headers=HEADERS)
             print(f"Resposta do /api/cards/{card_id}/items/{item_id}: {response.status_code}, {response.text}")
             response.raise_for_status()
-            page.client_storage.remove("comandas")  # Invalidar cache
+            page.client_storage.remove("comandas")
             return True
         except RequestException as e:
             print(f"Erro ao remover item: {str(e)}")
@@ -243,11 +258,10 @@ def main(page: ft.Page):
             print(f"Resposta do /api/card-payments: {response.status_code}, {response.text}")
             response.raise_for_status()
             payment = response.json()
-            # Obter recibo PDF
             receipt_response = requests.get(f"{API_BASE_URL}card-payments/{payment['card_id']}/receipt", headers=HEADERS)
             print(f"Resposta do /api/card-payments/{payment['card_id']}/receipt: {receipt_response.status_code}")
             receipt_response.raise_for_status()
-            page.client_storage.remove("comandas")  # Invalidar cache
+            page.client_storage.remove("comandas")
             return payment, receipt_response.content
         except RequestException as e:
             print(f"Erro ao registrar pagamento: {str(e)}")
@@ -259,7 +273,8 @@ def main(page: ft.Page):
     # Interface principal
     def show_main_interface():
         print("Exibindo interface principal")
-        comandas = fetch_comandas()
+        comandas = []
+        comandas.extend(fetch_comandas())
         menu_items = fetch_menu_items()
 
         comanda_dropdown = ft.Dropdown(
@@ -358,7 +373,7 @@ def main(page: ft.Page):
                         )
                     )
                 total_comanda = sum(float(item['subtotal']) for item in comanda["card_items"])
-            total_comanda_text.value = f"Total: R$ {total_comanda:.2f}"            
+            total_comanda_text.value = f"Total: R$ {total_comanda:.2f}"
             calcular_troco()
             page.update()
 
@@ -406,6 +421,9 @@ def main(page: ft.Page):
                 except ValueError:
                     page.snack_bar = ft.SnackBar(ft.Text("Quantidade inválida!"))
                     page.snack_bar.open = True
+                except Exception as e:
+                    page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao adicionar item: {str(e)}"))
+                    page.snack_bar.open = True
             else:
                 page.snack_bar = ft.SnackBar(ft.Text("Selecione um item e informe a quantidade!"))
                 page.snack_bar.open = True
@@ -427,14 +445,13 @@ def main(page: ft.Page):
                 try:
                     valor_recebido_decimal = Decimal(valor_recebido.value.replace(",", "."))
                     comanda_id = int(comanda_dropdown.value.split("ID: ")[1].strip(")"))
-                    response = requests.get(f"{API_BASE_URL}cards/{comanda_id}/", headers=HEADERS)
+                    response = requests.get(f"{API_BASE_URL}cards/{comanda_id}", headers=HEADERS)
                     print(f"Resposta do /api/cards/{comanda_id} (calcular_troco): {response.status_code}, {response.text}")
                     response.raise_for_status()
                     comanda = response.json()
                     total_comanda = sum(float(item['subtotal']) for item in comanda["card_items"])
-                    troco = valor_recebido_decimal - total_comanda
+                    troco = Decimal(valor_recebido_decimal) - Decimal(total_comanda)
                     troco_text.value = f"Troco: R$ {troco:.2f}" if troco >= 0 else "Valor insuficiente!"
-                
                 except (ValueError, InvalidOperation, RequestException):
                     troco_text.value = "Troco: R$ 0.00"
             else:
@@ -450,7 +467,7 @@ def main(page: ft.Page):
                 return
 
             comanda_id = int(comanda_dropdown.value.split("ID: ")[1].strip(")"))
-            response = requests.get(f"{API_BASE_URL}cards/{comanda_id}/", headers=HEADERS)
+            response = requests.get(f"{API_BASE_URL}cards/{comanda_id}", headers=HEADERS)
             print(f"Resposta do /api/cards/{comanda_id} (confirmar_pagamento): {response.status_code}, {response.text}")
             response.raise_for_status()
             comanda = response.json()
@@ -481,7 +498,6 @@ def main(page: ft.Page):
                 item_dropdown.value = None
                 quantidade_field.value = "1"
 
-                # Exibir botão para download do recibo
                 receipt_data = base64.b64encode(receipt_pdf).decode()
                 page.snack_bar = ft.SnackBar(
                     content=ft.Row([
@@ -494,6 +510,20 @@ def main(page: ft.Page):
                 )
                 page.snack_bar.open = True
             page.update()
+
+        def atualizar_comandas_periodicamente():
+            print("Atualizando comandas periodicamente...")
+            try:
+                comandas[:] = fetch_comandas()
+                comanda_dropdown.options = [ft.dropdown.Option(f"Comanda {c['number']} (ID: {c['id']})") for c in comandas if c["is_active"]]
+                page.update()
+                threading.Timer(10.0, atualizar_comandas_periodicamente).start()
+            except Exception as e:
+                print(f"Erro ao atualizar comandas: {str(e)}")
+                if "Faça login novamente" not in str(e):
+                    threading.Timer(10.0, atualizar_comandas_periodicamente).start()
+
+        threading.Timer(10.0, atualizar_comandas_periodicamente).start()
 
         main_layout = ft.Column(
             [
@@ -511,14 +541,23 @@ def main(page: ft.Page):
                         item_dropdown,
                         quantidade_field,
                         ft.ElevatedButton("Adicionar Item", on_click=adicionar_item),
+                        ft.ElevatedButton(
+                            "Atualizar Comandas",
+                            on_click=lambda e: atualizar_comandas_periodicamente(),
+                            bgcolor=ft.Colors.BLUE_400,
+                            color=ft.Colors.WHITE,
+                        ),
                     ],
                     alignment=ft.MainAxisAlignment.START,
                     spacing=20,
                 ),
                 ft.Container(
-                    content=comanda_table,
+                    content=ft.ListView(
+                        controls=[comanda_table],
+                        auto_scroll=False,
+                        expand=True,
+                    ),
                     height=300,
-                    expand=True,
                     border=ft.border.all(1, ft.Colors.GREY_400),
                     margin=ft.margin.only(top=10),
                 ),

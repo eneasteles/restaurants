@@ -385,6 +385,9 @@ class CardPayment(models.Model):
 
     def save(self, *args, **kwargs):
     # Sempre atualiza o valor da venda baseado no total do cartão
+        
+        if not self.restaurant and self.card:
+            self.restaurant = self.card.restaurant
         if self.card:
             self.amount = self.card.total()
 
