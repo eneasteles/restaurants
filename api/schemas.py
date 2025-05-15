@@ -9,6 +9,7 @@ class MenuItemSchema(BaseModel):
     name: str
     price: Decimal
     is_available: bool
+    restaurant_id: int  # Adicionado
 
     class Config:
         from_attributes = True
@@ -16,7 +17,7 @@ class MenuItemSchema(BaseModel):
 class CardItemSchema(BaseModel):
     id: int
     menu_item: MenuItemSchema
-    quantity: int
+    quantity: Decimal
     price: Decimal
     subtotal: Decimal
 
@@ -29,6 +30,7 @@ class CardSchema(BaseModel):
     is_active: bool
     card_items: List[CardItemSchema]
     total: Decimal
+    restaurant_id: int  # Adicionado
 
     @classmethod
     def from_orm(cls, obj):
@@ -51,14 +53,16 @@ class CardSchema(BaseModel):
             number=obj.number,
             is_active=obj.is_active,
             card_items=card_items,
-            total=total
+            total=total,
+            restaurant_id=obj.restaurant_id  # Adicionado
         )
 
     class Config:
         from_attributes = True
+
 class CardItemCreateSchema(BaseModel):
     menu_item_id: int
-    quantity: int
+    quantity: Decimal
 
 class CardPaymentCreateSchema(BaseModel):
     card_id: int

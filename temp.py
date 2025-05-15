@@ -20,6 +20,7 @@ def main(page: ft.Page):
 
     # Função de login
     def login(username, password):
+        global RESTAURANT_ID
         print(f"Tentando login com usuário: {username}")
         try:
             response = requests.post(f"{API_BASE_URL}token/", data={"username": username, "password": password}, timeout=5)
@@ -35,35 +36,24 @@ def main(page: ft.Page):
             page.client_storage.set("refresh_token", refresh_token)
             headers = {"Authorization": f"Bearer {access_token}"}
             user_response = requests.get(f"{API_BASE_URL}user-profile", headers=headers, timeout=5)
-            print(f"Resposta do /api/user-profile: {user_response.status_code}, {user_response.text}")
+            print(f"Resposta do /api/user-profile: {user_response.status_code}, {response.text}")
             user_response.raise_for_status()
-            profile = user_response.json()
-            if "restaurant_id" not in profile:
-                raise RequestException("Resposta do /user-profile não contém restaurant_id")
-            restaurant_id = profile["restaurant_id"]
-            page.client_storage.set("restaurant_id", restaurant_id)
-            print(f"Login bem-sucedido: restaurant_id={restaurant_id}, role={profile.get('role', 'N/A')}")
-            return headers, restaurant_id, None
+            profile = user_response.json()            
+            RESTAURANT_ID = profile["restaurant_id"]
+            print(f"DEBUG: Perfil retornado: restaurant_id={profile['restaurant_id']}, role={profile['role']}, RESTAURANT_ID={RESTAURANT_ID}")
+            return headers, profile["restaurant_id"], None
         except RequestException as e:
             print(f"Erro no login: {str(e)}")
             return None, None, str(e)
-        except Exception as e:
-            print(f"Erro inesperado no login: {str(e)}")
-            return None, None, f"Erro inesperado: {str(e)}"
 
     def fetch_menu_items():
-        restaurant_id = page.client_storage.get("restaurant_id")
-        print(f"Buscando itens do cardápio... restaurant_id={restaurant_id}")
+        print(f"Buscando itens do cardápio... RESTAURANT_ID={RESTAURANT_ID}")
         page.client_storage.remove("menu_items")
         try:
             response = requests.get(f"{API_BASE_URL}menu-items", headers=HEADERS)
             print(f"Resposta do /api/menu-items: {response.status_code}, {response.text}")
             response.raise_for_status()
             menu_items = response.json()
-            for item in menu_items:
-                if item.get("restaurant_id") != restaurant_id:
-                    print(f"Erro: Item {item['name']} tem restaurant_id={item['restaurant_id']}, esperado={restaurant_id}")
-                    raise RequestException("Itens de outro restaurante detectados")
             page.client_storage.set("menu_items", menu_items)
             return menu_items
         except RequestException as e:
@@ -73,13 +63,16 @@ def main(page: ft.Page):
             page.update()
             return []
 
+    
+
+    
+
     def fetch_comandas():
-        restaurant_id = page.client_storage.get("restaurant_id")
-        print(f"Buscando comandas... restaurant_id={restaurant_id}")
         page.client_storage.remove("comandas")
+        print(f"Buscando comandas... RESTAURANT_ID={RESTAURANT_ID}")
         try:
             response = requests.get(f"{API_BASE_URL}cards", headers=HEADERS)
-            print(f"Resposta do /api/cards: {response.status_code}, {response.text}")
+            print(f"DEBUG - HEADERS enviados: {HEADERS}")
             if response.status_code == 401:
                 print("Token expirado, tentando renovar...")
                 refresh_token = page.client_storage.get("refresh_token")
@@ -99,11 +92,6 @@ def main(page: ft.Page):
                     raise RequestException(f"Erro ao renovar token: {response.status_code} {response.text}")
             response.raise_for_status()
             comandas = response.json()
-            print(f"Comandas recebidas: {comandas}")
-            for comanda in comandas:
-                if comanda.get("restaurant_id") != restaurant_id:
-                    print(f"Erro: Comanda {comanda['number']} tem restaurant_id={comanda['restaurant_id']}, esperado={restaurant_id}")
-                    raise RequestException("Comandas de outro restaurante detectadas")
             page.client_storage.set("comandas", comandas)
             return comandas
         except RequestException as e:
@@ -115,65 +103,22 @@ def main(page: ft.Page):
                 show_login_screen(error_message="Sessão expirada. Faça login novamente.")
             return []
 
-    def create_comanda():
-        restaurant_id = page.client_storage.get("restaurant_id")
-        print(f"Criando nova comanda... restaurant_id={restaurant_id}")
-        try:
-            # Initial POST to create comanda
-            response = requests.post(f"{API_BASE_URL}cards", headers=HEADERS)
-            print(f"Resposta do /api/cards (POST): {response.status_code}, {response.text}")
-            response.raise_for_status()
-            new_comanda = response.json()
-            if new_comanda.get("restaurant_id") != restaurant_id:
-                print(f"Erro: Nova comanda {new_comanda['number']} tem restaurant_id={new_comanda['restaurant_id']}, esperado={restaurant_id}")
-                raise RequestException("Comanda criada com restaurante incorreto")
-            
-            # Calculate new number: API number + 1000
-            original_number = int(new_comanda.get("number", 0))
-            new_number = original_number + 1000
-            
-            # Update comanda with new number via PATCH
-            patch_data = {"number": new_number}
-            patch_response = requests.patch(
-                f"{API_BASE_URL}cards/{new_comanda['id']}",
-                headers=HEADERS,
-                json=patch_data
-            )
-            print(f"Resposta do /api/cards/{new_comanda['id']} (PATCH): {patch_response.status_code}, {patch_response.text}")
-            patch_response.raise_for_status()
-            
-            # Update new_comanda with the patched number
-            new_comanda["number"] = new_number
-            
-            # Update comandas list and storage
-            page.client_storage.remove("comandas")
-            comandas.append(new_comanda)
-            
-            # Update dropdown
-            if hasattr(page, 'comanda_dropdown') and page.comanda_dropdown is not None:
-                page.comanda_dropdown.options = [ft.dropdown.Option(f"Comanda {c['number']} (ID: {c['id']})") for c in comandas if c["is_active"]]
-            else:
-                print("Aviso: page.comanda_dropdown não definido, dropdown não atualizado")
-                
-            # Refresh comanda table (if applicable)
-            try:
-                atualizar_tabela_comanda()
-                print("Tabela de comanda atualizada")
-            except NameError:
-                print("Aviso: atualizar_tabela_comanda não definido, tabela não atualizada")
-            
-            # Show success message
-            page.snack_bar = ft.SnackBar(ft.Text(f"Comanda {new_comanda['number']} criada com sucesso!"))
+    def show_main_interface():
+        print("Exibindo interface principal")
+        comandas = fetch_comandas()
+        menu_items = fetch_menu_items()
+        if not comandas or not menu_items:
+            print("Nenhum item ou comanda disponível")
+            page.snack_bar = ft.SnackBar(ft.Text("Nenhum item ou comanda disponível. Adicione itens ao cardápio ou crie comandas."))
             page.snack_bar.open = True
-            page.update()            
-            return new_comanda
-        except RequestException as e:
-            print(f"Erro ao criar comanda: {str(e)}")
-            page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao criar comanda: {str(e)}."))
-            page.snack_bar.open = True
-            page.update()
-            return None
+        comanda_dropdown = ft.Dropdown(
+            label="Selecione a Comanda",
+            options=[ft.dropdown.Option(f"Comanda {c['number']} (ID: {c['id']})") for c in comandas if c["is_active"]],
+            width=300,
+            on_change=lambda e: atualizar_tabela_comanda(),
+        )
 
+    # Tela de autenticação
     def show_login_screen(error_message=None):
         print("Exibindo tela de login")
         username_field = ft.TextField(
@@ -211,14 +156,14 @@ def main(page: ft.Page):
             headers, restaurant_id, error = login(username_field.value, password_field.value)
             loading.visible = False
 
-            if headers and restaurant_id is not None:
+            if headers and restaurant_id:
                 HEADERS.clear()
                 HEADERS.update(headers)
-                print(f"handle_login: Definindo restaurant_id={restaurant_id} em client_storage")
-                page.client_storage.set("restaurant_id", restaurant_id)
+                global RESTAURANT_ID
+                RESTAURANT_ID = restaurant_id
                 show_main_interface()
             else:
-                error_message_text.value = f"Erro de autenticação: {error or 'Falha ao obter ID do restaurante. Verifique suas credenciais ou conexão com o servidor.'}"
+                error_message_text.value = f"Erro de autenticação: {error or 'Verifique suas credenciais ou conexão com o servidor.'}"
                 error_message_text.visible = True
             page.update()
 
@@ -285,6 +230,71 @@ def main(page: ft.Page):
         )
         page.update()
 
+    # Funções para chamadas à API
+    def fetch_comandas():
+        page.client_storage.remove("comandas")
+        print("Buscando comandas...")
+        print(f"DEBUG - HEADERS enviados: {HEADERS}")
+        try:
+            response = requests.get(f"{API_BASE_URL}cards", headers=HEADERS)
+            if response.status_code == 401:
+                print("Token expirado, tentando renovar...")
+                refresh_token = page.client_storage.get("refresh_token")
+                if not refresh_token:
+                    raise RequestException("Nenhum refresh_token disponível. Faça login novamente.")
+                response = requests.post(f"{API_BASE_URL}token/refresh/", json={"refresh": refresh_token})
+                print(f"Resposta do /api/token/refresh/: {response.status_code}, {response.text}")
+                if response.status_code == 200:
+                    data = response.json()
+                    new_access_token = data.get("access")
+                    if not new_access_token:
+                        raise RequestException("Resposta da renovação não contém access_token")
+                    HEADERS["Authorization"] = f"Bearer {new_access_token}"
+                    page.client_storage.set("access_token", new_access_token)
+                    print(f"Novo token obtido: {new_access_token[:10]}...")
+                    response = requests.get(f"{API_BASE_URL}cards", headers=HEADERS)
+                else:
+                    raise RequestException(f"Erro ao renovar token: {response.status_code} {response.text}")
+            response.raise_for_status()
+            comandas = response.json()
+            print(f"Comandas recebidas 0001: {comandas}")
+            # Validar comandas
+            for comanda in comandas:
+                if comanda.get("restaurant_id") != RESTAURANT_ID:
+                    print(f"Erro: Comanda {comanda['number']} pertence a outro restaurante (ID {comanda['restaurant_id']})")
+                    raise RequestException("Comandas de outro restaurante detectadas")
+            page.client_storage.set("comandas", comandas)
+            return comandas
+        except RequestException as e:
+            print(f"Erro ao buscar comandas: {str(e)}")
+            page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao buscar comandas: {str(e)}. Faça login novamente."))
+            page.snack_bar.open = True
+            page.update()
+            show_login_screen(error_message="Sessão expirada. Faça login novamente.")
+            return []
+
+    def fetch_menu_items():
+        print("Buscando itens do cardápio...")
+        page.client_storage.remove("menu_items")  # Limpar cache
+        try:
+            response = requests.get(f"{API_BASE_URL}menu-items", headers=HEADERS)
+            print(f"Resposta do /api/menu-items: {response.status_code}, {response.text}")
+            response.raise_for_status()
+            menu_items = response.json()
+            # Validar itens
+            for item in menu_items:
+                if item.get("restaurant_id") != RESTAURANT_ID:
+                    print(f"Erro: Item {item['name']} pertence a outro restaurante (ID {item['restaurant_id']})")
+                    raise RequestException("Itens de outro restaurante detectados")
+            page.client_storage.set("menu_items", menu_items)
+            return menu_items
+        except RequestException as e:
+            print(f"Erro ao buscar itens: {str(e)}")
+            page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao buscar itens do cardápio: {str(e)}"))
+            page.snack_bar.open = True
+            page.update()
+            return []
+
     def add_card_item(card_id, menu_item_id, quantity):
         print(f"Adicionando item: card_id={card_id}, menu_item_id={menu_item_id}, quantity={quantity}")
         try:
@@ -344,20 +354,13 @@ def main(page: ft.Page):
             page.update()
             return None, None
 
+    # Interface principal
     def show_main_interface():
-        restaurant_id = page.client_storage.get("restaurant_id")
-        print(f"Exibindo interface principal: restaurant_id={restaurant_id}")
-        if restaurant_id is None:
-            print("Erro: restaurant_id não definido em client_storage. Retornando à tela de login.")
-            page.snack_bar = ft.SnackBar(ft.Text("Erro: ID do restaurante não definido. Faça login novamente."))
-            page.snack_bar.open = True
-            show_login_screen(error_message="ID do restaurante não definido. Faça login novamente.")
-            return
-        global comandas
+        print("Exibindo interface principal")
         comandas = fetch_comandas()
         menu_items = fetch_menu_items()
         if not comandas or not menu_items:
-            print("Nenhum item ou comanda disponível")
+            print("Nenhum item ou comanda disponível, mantendo interface principal")
             page.snack_bar = ft.SnackBar(ft.Text("Nenhum item ou comanda disponível. Adicione itens ao cardápio ou crie comandas."))
             page.snack_bar.open = True
         comanda_dropdown = ft.Dropdown(
@@ -376,36 +379,6 @@ def main(page: ft.Page):
             value="1.0",
             width=100,
             keyboard_type=ft.KeyboardType.NUMBER,
-        )
-        def increase_quantity(e):
-            current_value = float(quantidade_field.value or "0")
-            quantidade_field.value = str(float(current_value) + 1)
-            page.update()
-
-        def decrease_quantity(e):
-            current_value = float(quantidade_field.value or "0")
-            if current_value > 0:
-                quantidade_field.value = str(float(current_value) - 1)
-            page.update()
-        
-        quantity_controls = ft.Row(
-            [
-                ft.IconButton(
-                    icon=ft.Icons.REMOVE,
-                    on_click=decrease_quantity,
-                    bgcolor=ft.Colors.RED_400,
-                    icon_color=ft.Colors.WHITE,
-                ),
-                quantidade_field,
-                ft.IconButton(
-                    icon=ft.Icons.ADD,
-                    on_click=increase_quantity,
-                    bgcolor=ft.Colors.GREEN_400,
-                    icon_color=ft.Colors.WHITE,
-                ),
-            ],
-        alignment=ft.MainAxisAlignment.CENTER,
-        spacing=5,
         )
         
         metodo_pagamento = ft.Dropdown(
@@ -431,6 +404,7 @@ def main(page: ft.Page):
         troco_text = ft.Text("Troco: R$ 0.00", visible=True)
         total_comanda_text = ft.Text("Total: R$ 0.00", size=20, weight=ft.FontWeight.BOLD)
 
+        # Botões para adicionar valores
         def adicionar_valor(valor):
             try:
                 current_value = Decimal(valor_recebido.value.replace(",", ".")) if valor_recebido.value else Decimal(0)
@@ -557,6 +531,7 @@ def main(page: ft.Page):
 
             if item_dropdown.value and quantidade_field.value:
                 try:
+                    # Normalizar entrada (aceitar vírgula ou ponto)
                     quantidade_str = quantidade_field.value.replace(",", ".")
                     print(f"Quantidade inserida: {quantidade_str}")
                     quantidade = Decimal(quantidade_str)
@@ -681,12 +656,7 @@ def main(page: ft.Page):
             page.update()
 
         def atualizar_comandas_periodicamente():
-            restaurant_id = page.client_storage.get("restaurant_id")
-            print(f"Atualizando comandas periodicamente... restaurant_id={restaurant_id}")
-            if restaurant_id is None:
-                print("Erro: restaurant_id não definido. Retornando à tela de login.")
-                show_login_screen(error_message="Sessão inválida. Faça login novamente.")
-                return
+            print("Atualizando comandas periodicamente...")
             try:
                 comandas[:] = fetch_comandas()
                 comanda_dropdown.options = [ft.dropdown.Option(f"Comanda {c['number']} (ID: {c['id']})") for c in comandas if c["is_active"]]
@@ -694,12 +664,7 @@ def main(page: ft.Page):
                 threading.Timer(10.0, atualizar_comandas_periodicamente).start()
             except Exception as e:
                 print(f"Erro ao atualizar comandas: {str(e)}")
-                if "Faça login novamente" in str(e) or "Autenticação necessária" in str(e):
-                    show_login_screen(error_message="Sessão expirada. Faça login novamente.")
-                else:
-                    page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao atualizar comandas: {str(e)}"))
-                    page.snack_bar.open = True
-                    page.update()
+                if "Faça login novamente" not in str(e):
                     threading.Timer(10.0, atualizar_comandas_periodicamente).start()
 
         threading.Timer(10.0, atualizar_comandas_periodicamente).start()
@@ -718,10 +683,8 @@ def main(page: ft.Page):
                     [
                         comanda_dropdown,
                         item_dropdown,
-                        quantity_controls,
-                        #quantidade_field,
+                        quantidade_field,
                         ft.ElevatedButton("Adicionar Item", on_click=adicionar_item),
-                        ft.ElevatedButton("Criar Comanda", on_click=lambda e: create_comanda(), bgcolor=ft.Colors.BLUE_400, color=ft.Colors.WHITE),
                         ft.ElevatedButton(
                             "Atualizar Comandas",
                             on_click=lambda e: atualizar_comandas_periodicamente(),
@@ -781,7 +744,6 @@ def main(page: ft.Page):
 
         page.controls.clear()
         page.add(main_layout)
-        page.update()
 
     show_login_screen()
 

@@ -13,6 +13,7 @@ from reportlab.pdfgen import canvas
 from io import BytesIO
 from django.utils import timezone
 from rest_framework_simplejwt.exceptions import InvalidToken, AuthenticationFailed
+
 class JWTAuth(HttpBearer):
     def authenticate(self, request, token):
         print(f"Validando token para {request.path}: {token[:20]}...")
@@ -28,7 +29,7 @@ class JWTAuth(HttpBearer):
             return None
 
 api = NinjaAPI(auth=JWTAuth())
-menu_router = Router(auth=JWTAuth())  # Explicitamente aplicar JWTAuth
+menu_router = Router(auth=JWTAuth())
 
 def get_user_restaurant_and_role(user):
     try:
@@ -61,7 +62,6 @@ def list_cards(request):
     restaurant, _ = get_user_restaurant_and_role(user)
     cards = Card.objects.filter(restaurant=restaurant, is_active=True)
     
-    # Forçar a serialização manual
     return [CardSchema.from_orm(card) for card in cards]
 
 @menu_router.get("/menu-items", response=list[MenuItemSchema])
@@ -85,14 +85,26 @@ def add_card_item(request, card_id: int, payload: CardItemCreateSchema):
     card = get_object_or_404(Card, id=card_id, restaurant=restaurant)
     menu_item = get_object_or_404(MenuItem, id=payload.menu_item_id, restaurant=restaurant)
     try:
+        # Converter quantity para Decimal explicitamente
+        quantity = Decimal(str(payload.quantity))
+        print(f"Criando CardItem: card_id={card_id}, menu_item_id={payload.menu_item_id}, quantity={quantity}, type={type(quantity)}, price={menu_item.price}, type={type(menu_item.price)}")
+        # Verificar se MenuItem tem campo stock e seu tipo
+        if hasattr(menu_item, 'stock'):
+            print(f"MenuItem stock: {menu_item.stock}, type={type(menu_item.stock)}")
         card_item = CardItem.objects.create(
             card=card,
             menu_item=menu_item,
-            quantity=payload.quantity,
+            quantity=quantity,
             price=menu_item.price
         )
-        return {"id": card_item.id, "menu_item_id": menu_item.id, "quantity": card_item.quantity}
+        print(f"CardItem criado: id={card_item.id}, quantity={card_item.quantity}, subtotal={card_item.subtotal()}")
+        return {
+            "id": card_item.id,
+            "menu_item_id": menu_item.id,
+            "quantity": card_item.quantity
+        }
     except Exception as e:
+        print(f"Erro ao criar CardItem: {str(e)}")
         return api.create_response(request, {"error": str(e)}, status=400)
 
 @api.delete("/cards/{card_id}/items/{item_id}")
@@ -117,7 +129,7 @@ def create_payment(request, payload: CardPaymentCreateSchema):
     try:
         payment = CardPayment.objects.create(
             card=card,
-            restaurant=restaurant,  # Adicione esta linha
+            restaurant=restaurant,
             payment_method=payload.payment_method,
             paid_amount=payload.paid_amount,
             notes=payload.notes
@@ -169,3 +181,23 @@ def get_card_details(request, card_id: int):
     restaurant, _ = get_user_restaurant_and_role(user)
     card = get_object_or_404(Card, id=card_id, restaurant=restaurant)
     return CardSchema.from_orm(card)
+
+@api.post("/cards", response=CardSchema)
+def create_card(request):
+    user = request.user
+    if not user.is_authenticated:
+        return api.create_response(request, {"error": "Autenticação necessária"}, status=401)
+    restaurant, _ = get_user_restaurant_and_role(user)
+    last_card = Card.objects.filter(restaurant=restaurant).order_by('-number').first()
+    new_number = last_card.number + 1 if last_card else 1
+    try:
+        card = Card.objects.create(
+            restaurant=restaurant,
+            number=new_number,
+            is_active=True
+        )
+        print(f"Comanda criada: id={card.id}, number={card.number}, restaurant_id={card.restaurant.id}")
+        return CardSchema.from_orm(card)
+    except Exception as e:
+        print(f"Erro ao criar comanda: {str(e)}")
+        return api.create_response(request, {"error": str(e)}, status=400)

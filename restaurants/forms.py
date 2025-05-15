@@ -1,5 +1,5 @@
 from django import forms
-from .models import Restaurant, Table, MenuItem, Order, Customer
+from .models import Restaurant, MenuItem, Customer
 
 
 class RestaurantForm(forms.ModelForm):
@@ -13,14 +13,7 @@ class RestaurantForm(forms.ModelForm):
             'slug': 'Parte da URL que identifica seu restaurante (letras, números e hífens)'
         }
 
-class TableForm(forms.ModelForm):
-    class Meta:
-        model = Table
-        fields = ['number', 'capacity']
-        widgets = {
-            'number': forms.TextInput(attrs={'placeholder': 'Ex: 1, A1, VIP1'}),
-            'capacity': forms.NumberInput(attrs={'min': 1}),
-        }
+
 
 class MenuItemForm(forms.ModelForm):
     class Meta:
@@ -41,24 +34,7 @@ class MenuItemForm(forms.ModelForm):
         if restaurant_id:
             self.fields['category'].queryset = self.fields['category'].queryset.filter(restaurant_id=restaurant_id)
 
-class OrderForm(forms.ModelForm):
-    class Meta:
-        model = Order
-        fields = ['table', 'customer', 'notes']
-        widgets = {
-            'notes': forms.Textarea(attrs={
-                'rows': 2,
-                'placeholder': 'Alergias, preferências, etc.'
-            }),
-        }
 
-    def __init__(self, *args, **kwargs):
-        restaurant_id = kwargs.pop('restaurant_id', None)
-        super().__init__(*args, **kwargs)
-        
-        if restaurant_id:
-            self.fields['table'].queryset = Table.objects.filter(restaurant_id=restaurant_id)
-            self.fields['customer'].queryset = Customer.objects.filter(restaurant_id=restaurant_id)
 
 class CustomerForm(forms.ModelForm):
     class Meta:

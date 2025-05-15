@@ -1,7 +1,7 @@
 from django.utils.safestring import mark_safe
 
 from django.contrib import admin
-from .models import Restaurant, Table, Category, MenuItem, Order, OrderItem, Customer, Card, CardItem, Stock,CardPayment, RestaurantUser
+from .models import Restaurant, Category, MenuItem, Customer, Card, CardItem, Stock,CardPayment, RestaurantUser
 from django.utils.timezone import localdate
 
 import qrcode
@@ -77,21 +77,7 @@ def calcular_crc16(payload):
     return f"{resultado:04X}"
 
 
-class OrderItemInline(admin.TabularInline):
-    model = OrderItem
-    extra = 1
-    fields = ('menu_item', 'quantity', 'price', 'subtotal')
-    readonly_fields = ('subtotal',)
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "menu_item" and not request.user.is_superuser:
-            kwargs["queryset"] = MenuItem.objects.filter(restaurant__owner=request.user)
-            return MenuItemWithStockLabelChoiceField(queryset=kwargs["queryset"])
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-    def subtotal(self, instance):
-        return f"R$ {instance.subtotal():.2f}"
-    subtotal.short_description = ('Subtotal')
 
 
 
@@ -130,33 +116,7 @@ class RestaurantAdmin(admin.ModelAdmin):
             obj.owner = request.user
         super().save_model(request, obj, form, change)
 
-@admin.register(Table)
-class TableAdmin(admin.ModelAdmin):
-    list_display = ('number', 'restaurant', 'capacity', 'is_occupied')
-    list_filter = ('restaurant', 'is_occupied')
-    search_fields = ('number', 'restaurant__name')
 
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        if request.user.is_superuser:
-            return qs
-        return qs.filter(restaurant__owner=request.user)
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if not request.user.is_superuser and db_field.name == "restaurant":
-            kwargs["queryset"] = Restaurant.objects.filter(owner=request.user)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-    def get_fields(self, request, obj=None):
-        fields = super().get_fields(request, obj)
-        if not request.user.is_superuser:
-            fields = [f for f in fields if f != 'restaurant']
-        return fields
-
-    def save_model(self, request, obj, form, change):
-        if not request.user.is_superuser and not obj.restaurant_id:
-            obj.restaurant = Restaurant.objects.filter(owner=request.user).first()
-        super().save_model(request, obj, form, change)
         
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
@@ -241,51 +201,6 @@ class MenuItemAdmin(admin.ModelAdmin):
             obj.restaurant = Restaurant.objects.filter(owner=request.user).first()
         super().save_model(request, obj, form, change)
 
-@admin.register(Order)
-class OrderAdmin(admin.ModelAdmin):
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        # Superusuário vê tudo
-        if request.user.is_superuser:
-            return qs
-        # Dono vê só suas mesas
-        return qs.filter(restaurant__owner=request.user)
-    list_display = ('id', 'restaurant',  'table', 'status', 'created_at', 'total_display')
-    readonly_fields = ('total_display',)
-    
-
-
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if not request.user.is_superuser:
-            if db_field.name == "restaurant":
-                kwargs["queryset"] = Restaurant.objects.filter(owner=request.user)
-            elif db_field.name == "table":
-                kwargs["queryset"] = Table.objects.filter(restaurant__owner=request.user)
-            elif db_field.name == "customer":
-                kwargs["queryset"] = Customer.objects.filter(restaurant__owner=request.user)
-            elif db_field.name == "card":
-                kwargs["queryset"] = Card.objects.filter(restaurant__owner=request.user)
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-
-
-    def total_display(self, obj):
-        total = sum(item.subtotal() for item in obj.order_items.all())
-        return f"R$ {total:.2f}"
-    total_display.short_description = ('Total')
-
-    def get_fields(self, request, obj=None):
-        fields = super().get_fields(request, obj)
-        if not request.user.is_superuser:
-            fields = [f for f in fields if f != 'restaurant']
-        return fields
-
-    def save_model(self, request, obj, form, change):
-        if not request.user.is_superuser and not obj.restaurant_id:
-            obj.restaurant = Restaurant.objects.filter(owner=request.user).first()
-        super().save_model(request, obj, form, change)
-
-    inlines = [OrderItemInline]     
 
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):    
