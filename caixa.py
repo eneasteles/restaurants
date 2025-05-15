@@ -8,10 +8,14 @@ import threading
 def main(page: ft.Page):
     page.title = "Caixa do Restaurante - Pagamentos"
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.padding = 20
+    page.padding = 10
     page.window_width = 900
     page.window_height = 700
     page.bgcolor = ft.Colors.GREY_100
+    page.viewport_scale = True  # Enable scaling
+    page.web_head = """
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    """
 
     # Configuração da API
     #API_BASE_URL = "http://192.168.0.141:8000/api/"  # Substitua pelo seu IP
@@ -709,7 +713,8 @@ def main(page: ft.Page):
             [
                 ft.Row(
                     [
-                        ft.Text("Sistema de Caixa - Pagamento de Comandas", size=24, weight=ft.FontWeight.BOLD),
+                        ft.Text("Sistema de Caixa - Pagamento de Comandas", size=20 if page.width < 600 else 24, weight=ft.FontWeight.BOLD,
+                                text_align=ft.TextAlign.CENTER,),
                         loading,
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
