@@ -15,7 +15,7 @@ def main(page: ft.Page):
 
     # Configuração da API
     #API_BASE_URL = "http://192.168.0.141:8000/api/"  # Substitua pelo seu IP
-    API_BASE_URL = "http://103.199.187.28:8000/api/"  # Substitua pelo seu IP
+    API_BASE_URL = "http://103.199.187.28:8001/api/"  # Substitua pelo seu IP
     HEADERS = {}
     RESTAURANT_ID = None
 
