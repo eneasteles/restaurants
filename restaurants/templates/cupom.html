@@ -1,13 +1,84 @@
-<h2>CUPOM DE VENDA</h2>
-<p><strong>Restaurante:</strong> {{ pagamento.restaurant.name }}</p>
-<p><strong>Data:</strong> {{ pagamento.paid_at }}</p>
-<p><strong>Cartão:</strong> {{ pagamento.card.number }}</p>
-<hr>
-<ul>
-{% for item in itens %}
-    <li>{{ item.menu_item.name }} x{{ item.quantity }} — R$ {{ item.subtotal|floatformat:2 }}</li>
-{% endfor %}
-</ul>
-<hr>
-<p><strong>Total:</strong> R$ {{ pagamento.amount|floatformat:2 }}</p>
-<p><strong>Forma de Pagamento:</strong> {{ pagamento.get_payment_method_display }}</p>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cupom de Pagamento</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            font-size: 12px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 16px;
+        }
+        .details, .items {
+            margin-bottom: 20px;
+        }
+        .items table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .items th, .items td {
+            border: 1px solid #ddd;
+            padding: 5px;
+            text-align: left;
+        }
+        .items th {
+            background-color: #f2f2f2;
+        }
+        .total {
+            text-align: right;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ restaurant_name }}</h1>
+        <p>Cupom de Pagamento #{{ pagamento.id }}</p>
+        <p>Data: {{ pagamento.paid_at|date:"d/m/Y H:i" }}</p>
+    </div>
+    <div class="details">
+        <p><strong>Método de Pagamento:</strong> {{ pagamento.get_payment_method_display }}</p>
+        <p><strong>Valor Pago:</strong> R$ {{ pagamento.amount|floatformat:2 }}</p>
+        {% if pagamento.notes %}
+        <p><strong>Notas:</strong> {{ pagamento.notes }}</p>
+        {% endif %}
+    </div>
+    <div class="items">
+        <h2>Itens da Comanda</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Quantidade</th>
+                    <th>Preço Unitário</th>
+                    <th>Subtotal</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in itens %}
+                <tr>
+                    <td>{{ item.menu_item.name }}</td>
+                    <td>{{ item.quantity|floatformat:2 }}</td>
+                    <td>R$ {{ item.price|floatformat:2 }}</td>
+                    <td>R$ {{ item.subtotal|floatformat:2 }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4">Nenhum item na comanda.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="total">
+        <p>Total: R$ {{ pagamento.amount|floatformat:2 }}</p>
+    </div>
+</body>
+</html>

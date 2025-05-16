@@ -130,6 +130,7 @@ def gerar_cupom_pdf(request, payment_id):
     html_string = render_to_string('cupom.html', {
         'pagamento': pagamento,
         'itens': itens,
+        'restaurant_name': pagamento.restaurant.name,
     })
 
     pdf_file = HTML(string=html_string).write_pdf()
