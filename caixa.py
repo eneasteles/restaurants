@@ -12,7 +12,7 @@ import uuid
 import re
 
 # Global variables
-API_BASE_URL = "http://localhost:8000/api/"
+API_BASE_URL = "http://103.199.187.28:8001/api/"
 HEADERS = {}
 RESTAURANT_ID = None
 comandas = []
@@ -829,8 +829,8 @@ def show_main_interface():
                     print("QR code gerado, criando overlay")
                     qr_code_image = ft.Image(
                         src_base64=qr_code_base64,
-                        width=200,
-                        height=200,
+                        width=400,
+                        height=400,
                     )
                     qr_container = ft.Container(
                         content=ft.Column([
