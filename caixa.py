@@ -4,20 +4,63 @@ import requests
 from requests.exceptions import RequestException
 import base64
 import threading
+import qrcode
+from io import BytesIO
+from PIL import Image
+import time
+import uuid
+import re
 
-# Global variables (minimized)
-API_BASE_URL = "http://103.199.187.28:8001/api/"
+# Global variables
+API_BASE_URL = "http://localhost:8000/api/"
 HEADERS = {}
 RESTAURANT_ID = None
 comandas = []
 page = None
+
+def gerar_payload_pix(chave_pix: str, valor: float, nome_recebedor: str, cidade: str, txid: str) -> str:
+    valor_str = f"{valor:.2f}"  # Ensure 2 decimal places
+    # Ensure txid is alphanumeric and max 25 characters
+    txid = txid[:25]
+    gui = "BR.GOV.BCB.PIX"
+    merchant_info = f"00{len(gui):02d}{gui}" + f"01{len(chave_pix):02d}{chave_pix}"
+    merchant_info_formatado = f"26{len(merchant_info):02d}{merchant_info}"
+    info_adicional = f"05{len(txid):02d}{txid}"
+    info_adicional_formatado = f"62{len(info_adicional):02d}{info_adicional}"
+    payload_sem_crc = (
+        "000201"
+        + merchant_info_formatado
+        + "52040000"
+        + "5303986"
+        + f"54{len(valor_str):02d}{valor_str}"  # Fixed length for amount
+        + "5802BR"
+        + f"59{len(nome_recebedor):02d}{nome_recebedor}"
+        + f"60{len(cidade):02d}{cidade}"
+        + info_adicional_formatado
+        + "6304"
+    )
+    crc16 = calcular_crc16(payload_sem_crc)
+    return payload_sem_crc + crc16
+
+def calcular_crc16(payload):
+    polinomio = 0x1021
+    resultado = 0xFFFF
+    for caractere in payload:
+        resultado ^= ord(caractere) << 8
+        for _ in range(8):
+            if (resultado & 0x8000) != 0:
+                resultado = (resultado << 1) ^ polinomio
+            else:
+                resultado <<= 1
+            resultado &= 0xFFFF
+    return f"{resultado:04X}"
 
 def main(page_param: ft.Page):
     global page
     page = page_param
     page.title = "Caixa do Restaurante - Pagamentos"
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.padding = 5  # Reduced padding for mobile
+    page.padding = 5
     page.window_width = 900
     page.window_height = 700
     page.bgcolor = ft.Colors.GREY_100
@@ -49,7 +92,7 @@ def login(username, password):
         page.client_storage.set("refresh_token", refresh_token)
         headers = {"Authorization": f"Bearer {access_token}"}
         user_response = requests.get(f"{API_BASE_URL}user-profile", headers=headers, timeout=5)
-        print(f"Resposta do /api/user-profile: {user_response.status_code}, {user_response.text}")
+        print(f"Resposta do /api/user-profile: {user_response.status_code}, {response.text}")
         user_response.raise_for_status()
         profile = user_response.json()
         if "restaurant_id" not in profile:
@@ -176,6 +219,47 @@ def create_comanda():
         page.snack_bar.open = True
         page.update()
         return None
+
+def fetch_restaurant_details(restaurant_id):
+    print(f"Buscando detalhes do restaurante... restaurant_id={restaurant_id}")
+    try:
+        response = requests.get(f"{API_BASE_URL}restaurants/{restaurant_id}", headers=HEADERS)
+        print(f"Resposta do /api/restaurants/{restaurant_id}: {response.status_code}, {response.text}")
+        response.raise_for_status()
+        restaurant_data = response.json()
+        pix_key = restaurant_data.get("chave_pix")
+        name = restaurant_data.get("name")
+        city = restaurant_data.get("cidade")
+        if not pix_key or not name or not city:
+            raise RequestException(f"Dados incompletos: pix_key={pix_key}, name={name}, city={city}")
+        # Validate Pix key format (email, CPF, phone, or random key)
+        if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$|^[0-9]{11}$|^[0-9]{8,36}$|^[0-9+]{12,14}$", pix_key):
+            raise RequestException(f"Formato de chave Pix inválido: {pix_key}")
+        return pix_key, name, city
+    except RequestException as e:
+        print(f"Erro ao buscar detalhes do restaurante: {str(e)}")
+        page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao buscar dados do restaurante: {str(e)}. Usando dados padrão."))
+        page.snack_bar.open = True
+        page.update()
+        return "12345678901", "Restaurante Exemplo", "BRASILIA"
+
+def generate_pix_qr_code(pix_key, amount, restaurant_name, city, txid):
+    print(f"Gerando QR code para Pix: chave={pix_key}, valor={amount}, restaurante={restaurant_name}, cidade={city}, txid={txid}")
+    pix_payload = gerar_payload_pix(
+        chave_pix=pix_key,
+        valor=amount,
+        nome_recebedor=restaurant_name[:25],
+        cidade=city[:15],  # Pix standard limits city to 15 characters
+        txid=txid
+    )
+    print(f"Payload gerado: {pix_payload}")
+    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
+    qr.add_data(pix_payload)
+    qr.make(fit=True)
+    qr_image = qr.make_image(fill_color="black", back_color="white")
+    buffer = BytesIO()
+    qr_image.save(buffer, format="PNG")
+    return buffer.getvalue()
 
 def show_login_screen(error_message=None):
     print("Exibindo tela de login")
@@ -374,7 +458,9 @@ def print_receipt(receipt_data):
                     if (win) {{
                         win.onload = function() {{
                             win.print();
-                            setTimeout(function() {{ URL.revokeObjectURL(url); }}, 1000);
+                            setTimeout(function() {{
+                                URL.revokeObjectURL(url);
+                            }}, 1000);
                         }};
                     }} else {{
                         console.error('Failed to open window');
@@ -396,14 +482,15 @@ def print_receipt(receipt_data):
         page.update()
 
 def show_main_interface():
-    restaurant_id = page.client_storage.get("restaurant_id")
-    print(f"Exibindo interface principal: restaurant_id={restaurant_id}")
-    if restaurant_id is None:
-        print("Erro: restaurant_id não definido em client_storage. Retornando à tela de login.")
+    try:
+        restaurant_id = page.client_storage.get("restaurant_id")
+    except Exception as e:
+        print(f"Erro ao obter restaurant_id: {str(e)}")
         page.snack_bar = ft.SnackBar(ft.Text("Erro: ID do restaurante não definido. Faça login novamente."))
         page.snack_bar.open = True
         show_login_screen(error_message="ID do restaurante não definido. Faça login novamente.")
         return
+    print(f"Exibindo interface principal: restaurant_id={restaurant_id}")
     global comandas
     comandas = fetch_comandas()
     menu_items = fetch_menu_items()
@@ -477,7 +564,7 @@ def show_main_interface():
         value="CA",
         width=min(page.width * 0.85, 200),
         text_size=14 if page.width < 600 else 16,
-        on_change=lambda e: atualizar_visibilidade_valor_recebido(),
+        on_change=lambda e: (print("Dropdown pagamento alterado"), atualizar_visibilidade_valor_recebido()),
     )
     page.valor_recebido = ft.TextField(
         label="Valor Recebido (R$)",
@@ -545,6 +632,15 @@ def show_main_interface():
         rows=[],
     )
     loading = ft.ProgressRing(visible=False, width=20 if page.width < 600 else 24, height=20 if page.width < 600 else 24)
+
+    test_qr_button = ft.ElevatedButton(
+        text="Testar QR Code",
+        on_click=lambda e: atualizar_visibilidade_valor_recebido(),
+        bgcolor=ft.Colors.ORANGE_400,
+        color=ft.Colors.WHITE,
+        width=page.width * 0.85 if page.width < 600 else 150,
+        height=40 if page.width < 600 else 50,
+    )
 
     def calcular_totais(comanda):
         total = 0
@@ -623,6 +719,7 @@ def show_main_interface():
             total_comanda = sum(float(item['subtotal']) for item in comanda["card_items"])
         page.total_comanda_text.value = f"Total: R$ {total_comanda:.2f}"
         calcular_troco()
+        atualizar_visibilidade_valor_recebido()
         page.update()
 
     def handle_delete_item(card_id, item_id):
@@ -686,18 +783,107 @@ def show_main_interface():
         page.update()
 
     def atualizar_visibilidade_valor_recebido():
-        print("Atualizando visibilidade do valor recebido")
-        if hasattr(page, 'valor_recebido') and hasattr(page, 'troco_text') and hasattr(page, 'metodo_pagamento'):
-            is_cash = page.metodo_pagamento.value == "CA"
-            is_small_screen = page.width < 600
-            page.valor_recebido.visible = is_cash
-            page.troco_text.visible = is_cash
-            botoes_valores.visible = is_cash and not is_small_screen
-            if not page.valor_recebido.visible:
-                page.valor_recebido.value = ""
-                page.troco_text.value = "Troco: R$ 0.00"
-            calcular_troco()
-            page.update()
+        print(f"Início de atualizar_visibilidade_valor_recebido, metodo_pagamento={getattr(page, 'metodo_pagamento', None).value if hasattr(page, 'metodo_pagamento') else 'N/A'}")
+        if not (hasattr(page, 'valor_recebido') and hasattr(page, 'troco_text') and hasattr(page, 'metodo_pagamento')):
+            print("Erro: Atributos valor_recebido, troco_text ou metodo_pagamento não definidos")
+            return
+
+        is_cash = page.metodo_pagamento.value == "CA"
+        is_pix = page.metodo_pagamento.value == "PX"
+        is_small_screen = page.width < 600
+        print(f"is_cash={is_cash}, is_pix={is_pix}, is_small_screen={is_small_screen}, comanda_dropdown_value={getattr(page.comanda_dropdown, 'value', None)}")
+
+        page.valor_recebido.visible = is_cash
+        page.troco_text.visible = is_cash
+        botoes_valores.visible = is_cash and not is_small_screen
+        if not page.valor_recebido.visible:
+            page.valor_recebido.value = ""
+            page.troco_text.value = "Troco: R$ 0.00"
+
+        page.overlay.clear()
+
+        if is_pix and hasattr(page, 'comanda_dropdown') and page.comanda_dropdown.value:
+            print("Condição para exibir QR code Pix atendida")
+            comanda_id = int(page.comanda_dropdown.value.split("ID: ")[1].strip(")"))
+            try:
+                response = requests.get(f"{API_BASE_URL}cards/{comanda_id}", headers=HEADERS)
+                print(f"Resposta do /api/cards/{comanda_id} (QR code): {response.status_code}, {response.text}")
+                response.raise_for_status()
+                comanda = response.json()
+                total_comanda = sum(float(item['subtotal']) for item in comanda["card_items"])
+                print(f"Total da comanda calculado: R$ {total_comanda:.2f}")
+                if total_comanda <= 0:
+                    print("Comanda sem itens, exibindo snack bar")
+                    page.snack_bar = ft.SnackBar(ft.Text("Comanda sem itens para pagamento!"))
+                    page.snack_bar.open = True
+                    page.update()
+                    return
+
+                restaurant_id = page.client_storage.get("restaurant_id")
+                pix_key, restaurant_name, city = fetch_restaurant_details(restaurant_id)
+                txid = f"COM{comanda['number']}ID{comanda['id']}"
+                print(f"Pix key: {pix_key}, Restaurant name: {restaurant_name}, Cidade: {city}, txid: {txid}")
+                if pix_key:
+                    qr_code_data = generate_pix_qr_code(pix_key, total_comanda, restaurant_name, city, txid)
+                    qr_code_base64 = base64.b64encode(qr_code_data).decode()
+                    print("QR code gerado, criando overlay")
+                    qr_code_image = ft.Image(
+                        src_base64=qr_code_base64,
+                        width=200,
+                        height=200,
+                    )
+                    qr_container = ft.Container(
+                        content=ft.Column([
+                            ft.Text("QR Code para Pagamento Pix", size=18, weight=ft.FontWeight.BOLD),
+                            qr_code_image,
+                            ft.Text(f"Chave Pix: {pix_key}"),
+                            ft.Text(f"Valor: R$ {total_comanda:.2f}"),
+                            ft.ElevatedButton(
+                                "Fechar",
+                                on_click=lambda e: (page.overlay.clear(), page.update()),
+                                bgcolor=ft.Colors.RED_400,
+                                color=ft.Colors.WHITE,
+                            ),
+                        ], alignment=ft.MainAxisAlignment.CENTER, spacing=10),
+                        bgcolor=ft.Colors.WHITE,
+                        padding=20,
+                        border_radius=10,
+                        shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_300),
+                        alignment=ft.alignment.center,
+                    )
+                    page.overlay.append(qr_container)
+                    print("Overlay configurado para exibição")
+                    # Retry rendering up to 3 times
+                    for _ in range(3):
+                        time.sleep(0.2)
+                        page.update()
+                    # Fallback image
+                    page.add(ft.Text("QR Code (Fallback):"))
+                    page.add(qr_code_image)
+                else:
+                    print("Pix key não disponível, exibindo snack bar")
+                    page.snack_bar = ft.SnackBar(ft.Text("Chave Pix não disponível."))
+                    page.snack_bar.open = True
+            except Exception as e:
+                print(f"Erro ao gerar QR code Pix: {str(e)}")
+                page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao gerar QR code Pix: {str(e)}"))
+                page.snack_bar.open = True
+        else:
+            print("Fechando overlay, Pix não selecionado ou comanda não selecionada")
+            page.overlay.clear()
+        page.update()
+        print("Fim de atualizar_visibilidade_valor_recebido")
+
+    def close_dialog():
+        print("Chamando close_dialog")
+        page.overlay.clear()
+        if hasattr(page, 'dialog') and page.dialog and page.dialog.open:
+            page.dialog.open = False
+            page.dialog = None
+            print("Dialog fechado")
+        else:
+            print("Nenhum dialog aberto para fechar")
+        page.update()
 
     def calcular_troco():
         print("Calculando troco")
@@ -778,6 +964,7 @@ def show_main_interface():
             botoes_valores.visible = page.width >= 600
             item_dropdown.value = None
             quantidade_field.value = "1.0"
+            close_dialog()
 
             receipt_data = base64.b64encode(receipt_pdf).decode()
             snack_content = ft.Column([
@@ -833,29 +1020,35 @@ def show_main_interface():
             page.update()
 
     def atualizar_comandas_periodicamente():
-        restaurant_id = page.client_storage.get("restaurant_id")
-        print(f"Atualizando comandas periodicamente... restaurant_id={restaurant_id}")
-        if restaurant_id is None:
-            print("Erro: restaurant_id não definido. Retornando à tela de login.")
+        print("Iniciando atualização periódica de comandas")
+        try:
+            restaurant_id = page.client_storage.get("restaurant_id")
+        except Exception as e:
+            print(f"Erro ao obter restaurant_id: {str(e)}")
+            page.snack_bar = ft.SnackBar(ft.Text("Sessão inválida. Faça login novamente."))
+            page.snack_bar.open = True
             show_login_screen(error_message="Sessão inválida. Faça login novamente.")
             return
+        print(f"Atualizando comandas periodicamente... restaurant_id={restaurant_id}")
         try:
             comandas[:] = fetch_comandas()
             if hasattr(page, 'comanda_dropdown') and page.comanda_dropdown:
                 page.comanda_dropdown.options = [ft.dropdown.Option(f"Comanda {c['number']} (ID: {c['id']})") for c in comandas if c["is_active"]]
             page.update()
-            threading.Timer(10.0, atualizar_comandas_periodicamente).start()
+            threading.Timer(30.0, atualizar_comandas_periodicamente).start()
         except Exception as e:
             print(f"Erro ao atualizar comandas: {str(e)}")
             if "Faça login novamente" in str(e) or "Autenticação necessária" in str(e):
+                page.snack_bar = ft.SnackBar(ft.Text("Sessão expirada. Faça login novamente."))
+                page.snack_bar.open = True
                 show_login_screen(error_message="Sessão expirada. Faça login novamente.")
             else:
                 page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao atualizar comandas: {str(e)}"))
                 page.snack_bar.open = True
                 page.update()
-                threading.Timer(10.0, atualizar_comandas_periodicamente).start()
+            threading.Timer(30.0, atualizar_comandas_periodicamente).start()
 
-    threading.Timer(10.0, atualizar_comandas_periodicamente).start()
+    threading.Timer(30.0, atualizar_comandas_periodicamente).start()
 
     main_layout = ft.Column(
         [
@@ -977,6 +1170,7 @@ def show_main_interface():
                         width=page.width * 0.85 if page.width < 600 else 200,
                         height=40 if page.width < 600 else 50,
                     ),
+                    test_qr_button,
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
             ),

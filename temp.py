@@ -4,9 +4,17 @@ import requests
 from requests.exceptions import RequestException
 import base64
 import threading
+import qrcode
+from io import BytesIO
+from PIL import Image
 
 # Global variables (minimized)
 API_BASE_URL = "http://103.199.187.28:8001/api/"
+
+# Global variables (minimized)
+API_BASE_URL = "http://localhost:8000/api/"
+#API_BASE_URL = "http://103.199.187.28:8001/api/"
+
 HEADERS = {}
 RESTAURANT_ID = None
 comandas = []
@@ -17,7 +25,7 @@ def main(page_param: ft.Page):
     page = page_param
     page.title = "Caixa do Restaurante - Pagamentos"
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.padding = 10
+    page.padding = 5  # Reduced padding for mobile
     page.window_width = 900
     page.window_height = 700
     page.bgcolor = ft.Colors.GREY_100
@@ -28,7 +36,7 @@ def main(page_param: ft.Page):
     page.add(
         ft.SafeArea(
             content=ft.Column([]),
-            minimum_padding=10,
+            minimum_padding=5,
         )
     )
     show_login_screen()
@@ -177,26 +185,58 @@ def create_comanda():
         page.update()
         return None
 
+def fetch_restaurant_pix_key():
+    restaurant_id = page.client_storage.get("restaurant_id")
+    print(f"Buscando chave Pix do restaurante... restaurant_id={restaurant_id}")
+    try:
+        response = requests.get(f"{API_BASE_URL}restaurants/{restaurant_id}", headers=HEADERS)
+        print(f"Resposta do /api/restaurants/{restaurant_id}: {response.status_code}, {response.text}")
+        response.raise_for_status()
+        restaurant_data = response.json()
+        pix_key = restaurant_data.get("chave_pix")
+        if not pix_key:
+            raise RequestException("Chave Pix não configurada para o restaurante")
+        return pix_key
+    except RequestException as e:
+        print(f"Erro ao buscar chave Pix: {str(e)}")
+        page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao buscar chave Pix: {str(e)}"))
+        page.snack_bar.open = True
+        page.update()
+        return None
+
+def generate_pix_qr_code(pix_key, amount, restaurant_name):
+    print(f"Gerando QR code para Pix: chave={pix_key}, valor={amount}, restaurante={restaurant_name}")
+    pix_payload = f"00020126360014BR.GOV.BCB.PIX0114{pix_key}5204000053039865406{amount:.2f}5802BR5913{restaurant_name[:25]}6008BRASILIA62070503***6304"
+    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
+    qr.add_data(pix_payload)
+    qr.make(fit=True)
+    qr_image = qr.make_image(fill_color="black", back_color="white")
+    buffer = BytesIO()
+    qr_image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
 def show_login_screen(error_message=None):
     print("Exibindo tela de login")
     username_field = ft.TextField(
         label="Usuário",
         prefix_icon=ft.Icons.PERSON,
-        width=300,
+        width=min(page.width * 0.85, 300),
         border_radius=10,
         border_color=ft.Colors.GREY_400,
+        text_size=14 if page.width < 600 else 16,
     )
     password_field = ft.TextField(
         label="Senha",
         prefix_icon=ft.Icons.LOCK,
         password=True,
         can_reveal_password=True,
-        width=300,
+        width=min(page.width * 0.85, 300),
         border_radius=10,
         border_color=ft.Colors.GREY_400,
+        text_size=14 if page.width < 600 else 16,
     )
-    error_message_text = ft.Text(error_message, color=ft.Colors.RED_600, visible=bool(error_message))
-    loading = ft.ProgressRing(visible=False, width=24, height=24)
+    error_message_text = ft.Text(error_message, color=ft.Colors.RED_600, visible=bool(error_message), size=12 if page.width < 600 else 14)
+    loading = ft.ProgressRing(visible=False, width=20 if page.width < 600 else 24, height=20 if page.width < 600 else 24)
 
     def handle_login(e):
         print("Botão Entrar clicado")
@@ -230,16 +270,16 @@ def show_login_screen(error_message=None):
             [
                 ft.Text(
                     "Sistema de Caixa",
-                    size=28,
+                    size=24 if page.width < 600 else 28,
                     weight=ft.FontWeight.BOLD,
                     color=ft.Colors.BLUE_900,
                 ),
                 ft.Text(
                     "Faça login para continuar",
-                    size=16,
+                    size=14 if page.width < 600 else 16,
                     color=ft.Colors.GREY_600,
                 ),
-                ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+                ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
                 username_field,
                 password_field,
                 error_message_text,
@@ -248,15 +288,15 @@ def show_login_screen(error_message=None):
                         ft.ElevatedButton(
                             content=ft.Row(
                                 [
-                                    ft.Text("Entrar", size=16, weight=ft.FontWeight.BOLD),
+                                    ft.Text("Entrar", size=14 if page.width < 600 else 16, weight=ft.FontWeight.BOLD),
                                     loading,
                                 ],
-                                spacing=10,
+                                spacing=5,
                             ),
                             bgcolor=ft.Colors.GREEN_400,
                             color=ft.Colors.WHITE,
-                            width=300,
-                            height=50,
+                            width=min(page.width * 0.85, 300),
+                            height=40 if page.width < 600 else 50,
                             on_click=handle_login,
                         ),
                     ],
@@ -264,10 +304,10 @@ def show_login_screen(error_message=None):
                 ),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
-            spacing=15,
+            spacing=10,
         ),
-        width=400,
-        padding=30,
+        width=min(page.width * 0.9, 400),
+        padding=20,
         bgcolor=ft.Colors.WHITE,
         border_radius=15,
         shadow=ft.BoxShadow(
@@ -347,7 +387,6 @@ def create_payment(card_id, payment_method, paid_amount=None, notes=""):
         page.update()
         return None, None
 
-# Added print_receipt function
 def print_receipt(receipt_data):
     print(f"Iniciando impressão do recibo, data length: {len(receipt_data)}")
     js_code = f"""
@@ -373,7 +412,9 @@ def print_receipt(receipt_data):
                     if (win) {{
                         win.onload = function() {{
                             win.print();
-                            setTimeout(function() {{ URL.revokeObjectURL(url); }}, 1000);
+                            setTimeout(function() {{
+                                URL.revokeObjectURL(url);
+                            }}, 1000);
                         }};
                     }} else {{
                         console.error('Failed to open window');
@@ -395,7 +436,6 @@ def print_receipt(receipt_data):
         page.update()
 
 def show_main_interface():
-    # Removed global declarations, using page attributes
     restaurant_id = page.client_storage.get("restaurant_id")
     print(f"Exibindo interface principal: restaurant_id={restaurant_id}")
     if restaurant_id is None:
@@ -415,22 +455,22 @@ def show_main_interface():
     page.comanda_dropdown = ft.Dropdown(
         label="Selecione a Comanda",
         options=[ft.dropdown.Option(f"Comanda {c['number']} (ID: {c['id']})") for c in comandas if c["is_active"]],
-        width=page.width * 0.9 if page.width < 600 else 300,
-        text_size=16,
+        width=min(page.width * 0.85, 300),
+        text_size=14 if page.width < 600 else 16,
         on_change=lambda e: atualizar_tabela_comanda(),
     )
     item_dropdown = ft.Dropdown(
         label="Selecione o Item",
         options=[ft.dropdown.Option(m["name"]) for m in menu_items],
-        width=page.width * 0.9 if page.width < 600 else 300,
-        text_size=16,
+        width=min(page.width * 0.85, 300),
+        text_size=14 if page.width < 600 else 16,
     )
     quantidade_field = ft.TextField(
         label="Quantidade",
         value="1.0",
         width=100,
         keyboard_type=ft.KeyboardType.NUMBER,
-        text_size=16,
+        text_size=14 if page.width < 600 else 16,
         text_align=ft.TextAlign.CENTER,
     )
     def increase_quantity(e):
@@ -451,7 +491,7 @@ def show_main_interface():
                 on_click=decrease_quantity,
                 bgcolor=ft.Colors.RED_400,
                 icon_color=ft.Colors.WHITE,
-                icon_size=24,
+                icon_size=20 if page.width < 600 else 24,
             ),
             quantidade_field,
             ft.IconButton(
@@ -459,11 +499,11 @@ def show_main_interface():
                 on_click=increase_quantity,
                 bgcolor=ft.Colors.GREEN_400,
                 icon_color=ft.Colors.WHITE,
-                icon_size=24,
+                icon_size=20 if page.width < 600 else 24,
             ),
         ],
         alignment=ft.MainAxisAlignment.CENTER,
-        spacing=10,
+        spacing=5,
     )
     page.metodo_pagamento = ft.Dropdown(
         label="Método de Pagamento",
@@ -475,20 +515,20 @@ def show_main_interface():
             ft.dropdown.Option(key="OT", text="Outro"),
         ],
         value="CA",
-        width=page.width * 0.9 if page.width < 600 else 200,
-        text_size=16,
+        width=min(page.width * 0.85, 200),
+        text_size=14 if page.width < 600 else 16,
         on_change=lambda e: atualizar_visibilidade_valor_recebido(),
     )
     page.valor_recebido = ft.TextField(
         label="Valor Recebido (R$)",
-        width=page.width * 0.9 if page.width < 600 else 150,
+        width=min(page.width * 0.85, 150),
         keyboard_type=ft.KeyboardType.NUMBER,
-        text_size=16,
+        text_size=14 if page.width < 600 else 16,
         visible=True,
         on_change=lambda e: calcular_troco(),
     )
-    page.troco_text = ft.Text("Troco: R$ 0.00", visible=True, size=14 if page.width < 600 else 16)
-    page.total_comanda_text = ft.Text("Total: R$ 0.00", size=18 if page.width < 600 else 20, weight=ft.FontWeight.BOLD)
+    page.troco_text = ft.Text("Troco: R$ 0.00", visible=True, size=12 if page.width < 600 else 14)
+    page.total_comanda_text = ft.Text("Total: R$ 0.00", size=16 if page.width < 600 else 18, weight=ft.FontWeight.BOLD)
 
     def adicionar_valor(valor):
         try:
@@ -515,9 +555,9 @@ def show_main_interface():
                 on_click=lambda e, v=valor: adicionar_valor(v),
                 bgcolor=ft.Colors.BLUE_100,
                 color=ft.Colors.BLUE_900,
-                width=60,
-                height=50,
-                col={"xs": 3, "sm": 2, "md": 1},
+                width=50 if page.width < 600 else 60,
+                height=40 if page.width < 600 else 50,
+                col={"xs": 4, "sm": 3, "md": 2},
             ) for valor in valores_botoes
         ] + [
             ft.ElevatedButton(
@@ -525,9 +565,9 @@ def show_main_interface():
                 on_click=lambda e: zerar_valor(),
                 bgcolor=ft.Colors.RED_100,
                 color=ft.Colors.RED_900,
-                width=60,
-                height=50,
-                col={"xs": 3, "sm": 2, "md": 1},
+                width=50 if page.width < 600 else 60,
+                height=40 if page.width < 600 else 50,
+                col={"xs": 4, "sm": 3, "md": 2},
             )
         ],
         alignment=ft.MainAxisAlignment.CENTER,
@@ -536,15 +576,15 @@ def show_main_interface():
     page.comanda_table = ft.DataTable(
         columns=[
             ft.DataColumn(ft.Text("Item")),
-            ft.DataColumn(ft.Text("Quantidade")),
-            ft.DataColumn(ft.Text("Preço Unitário")),
+            ft.DataColumn(ft.Text("Qtd.")),
+            ft.DataColumn(ft.Text("Preço")),
             ft.DataColumn(ft.Text("Subtotal")),
             ft.DataColumn(ft.Text("Ações")),
         ],
-        column_spacing=5 if page.width < 600 else 10,
+        column_spacing=5,
         rows=[],
     )
-    loading = ft.ProgressRing(visible=False, width=24, height=24)
+    loading = ft.ProgressRing(visible=False, width=20 if page.width < 600 else 24, height=20 if page.width < 600 else 24)
 
     def calcular_totais(comanda):
         total = 0
@@ -581,34 +621,39 @@ def show_main_interface():
                     ft.DataRow(
                         cells=[
                             ft.DataCell(
-                                ft.Container(
-                                    content=ft.Text(item["menu_item"]["name"], size=14 if page.width < 600 else 16),
-                                    width=100 if page.width < 600 else 150,
+                                ft.Text(
+                                    item["menu_item"]["name"],
+                                    size=12 if page.width < 600 else 14,
+                                    no_wrap=False,
+                                    overflow=ft.TextOverflow.ELLIPSIS,
                                 )
                             ),
                             ft.DataCell(
-                                ft.Container(
-                                    content=ft.Text(f"{float(item['quantity']):.2f}", size=14 if page.width < 600 else 16),
-                                    width=80 if page.width < 600 else 100,
+                                ft.Text(
+                                    f"{float(item['quantity']):.2f}",
+                                    size=12 if page.width < 600 else 14,
+                                    text_align=ft.TextAlign.CENTER,
                                 )
                             ),
                             ft.DataCell(
-                                ft.Container(
-                                    content=ft.Text(f"R$ {float(item['price']):.2f}", size=14 if page.width < 600 else 16),
-                                    width=80 if page.width < 600 else 100,
+                                ft.Text(
+                                    f"R$ {float(item['price']):.2f}",
+                                    size=12 if page.width < 600 else 14,
+                                    text_align=ft.TextAlign.RIGHT,
                                 )
                             ),
                             ft.DataCell(
-                                ft.Container(
-                                    content=ft.Text(f"R$ {float(item['subtotal']):.2f}", size=14 if page.width < 600 else 16),
-                                    width=80 if page.width < 600 else 100,
+                                ft.Text(
+                                    f"R$ {float(item['subtotal']):.2f}",
+                                    size=12 if page.width < 600 else 14,
+                                    text_align=ft.TextAlign.RIGHT,
                                 )
                             ),
                             ft.DataCell(
                                 ft.IconButton(
                                     icon=ft.Icons.DELETE,
                                     tooltip="Remover",
-                                    icon_size=20 if page.width < 600 else 24,
+                                    icon_size=16 if page.width < 600 else 20,
                                     on_click=lambda e, item_id=item["id"]: handle_delete_item(comanda_id, item_id)
                                 )
                             ),
@@ -622,7 +667,6 @@ def show_main_interface():
 
     def handle_delete_item(card_id, item_id):
         print(f"Chamando handle_delete_item: card_id={card_id}, item_id={item_id}")
-        loading = page.controls[0].content.controls[0].controls[1]
         loading.visible = True
         page.update()
         if delete_card_item(card_id, item_id):
@@ -684,13 +728,35 @@ def show_main_interface():
     def atualizar_visibilidade_valor_recebido():
         print("Atualizando visibilidade do valor recebido")
         if hasattr(page, 'valor_recebido') and hasattr(page, 'troco_text') and hasattr(page, 'metodo_pagamento'):
-            page.valor_recebido.visible = page.metodo_pagamento.value == "CA"
-            page.troco_text.visible = page.metodo_pagamento.value == "CA"
-            botoes_valores.visible = page.metodo_pagamento.value == "CA"
+            is_cash = page.metodo_pagamento.value == "CA"
+            is_small_screen = page.width < 600
+            page.valor_recebido.visible = is_cash
+            page.troco_text.visible = is_cash
+            botoes_valores.visible = is_cash and not is_small_screen
             if not page.valor_recebido.visible:
                 page.valor_recebido.value = ""
                 page.troco_text.value = "Troco: R$ 0.00"
             calcular_troco()
+            page.update()
+
+    def calcular_troco():
+        print("Calculando troco")
+        if hasattr(page, 'metodo_pagamento') and hasattr(page, 'valor_recebido') and hasattr(page, 'comanda_dropdown') and hasattr(page, 'troco_text'):
+            if page.metodo_pagamento.value == "CA" and page.valor_recebido.value and page.comanda_dropdown.value:
+                try:
+                    valor_recebido_decimal = Decimal(page.valor_recebido.value.replace(",", "."))
+                    comanda_id = int(page.comanda_dropdown.value.split("ID: ")[1].strip(")"))
+                    response = requests.get(f"{API_BASE_URL}cards/{comanda_id}", headers=HEADERS)
+                    print(f"Resposta do /api/cards/{comanda_id} (calcular_troco): {response.status_code}, {response.text}")
+                    response.raise_for_status()
+                    comanda = response.json()
+                    total_comanda = sum(float(item['subtotal']) for item in comanda["card_items"])
+                    troco = Decimal(valor_recebido_decimal) - Decimal(total_comanda)
+                    page.troco_text.value = f"Troco: R$ {troco:.2f}" if troco >= 0 else "Valor insuficiente!"
+                except (ValueError, InvalidOperation, RequestException):
+                    page.troco_text.value = "Troco: R$ 0.00"
+            else:
+                page.troco_text.value = "Troco: R$ 0.00"
             page.update()
 
     def confirmar_pagamento(e):
@@ -723,7 +789,6 @@ def show_main_interface():
             page.update()
             return
 
-        loading = page.controls[0].content.controls[0].controls[1]
         loading.visible = True
         page.update()
         paid_amount = float(page.valor_recebido.value.replace(",", ".")) if page.metodo_pagamento.value == "CA" and page.valor_recebido.value else None
@@ -750,12 +815,11 @@ def show_main_interface():
             page.troco_text.value = "Troco: R$ 0.00"
             page.valor_recebido.visible = True
             page.troco_text.visible = True
-            botoes_valores.visible = True
+            botoes_valores.visible = page.width >= 600
             item_dropdown.value = None
             quantidade_field.value = "1.0"
 
             receipt_data = base64.b64encode(receipt_pdf).decode()
-            # Optimized SnackBar with Column for mobile
             snack_content = ft.Column([
                 ft.Text(f"Pagamento de R$ {total_comanda:.2f} registrado com sucesso!", size=14 if page.width < 600 else 16),
                 ft.Row([
@@ -792,11 +856,47 @@ def show_main_interface():
                 ),
             ], spacing=10, alignment=ft.MainAxisAlignment.CENTER)
 
+            if page.metodo_pagamento.value == "PX":
+                pix_key = fetch_restaurant_pix_key()
+                if pix_key:
+                    try:
+                        response = requests.get(f"{API_BASE_URL}restaurants/{page.client_storage.get('restaurant_id')}", headers=HEADERS)
+                        restaurant_data = response.json()
+                        restaurant_name = restaurant_data.get("name", "Restaurante")
+                        qr_code_data = generate_pix_qr_code(pix_key, total_comanda, restaurant_name)
+                        qr_code_base64 = base64.b64encode(qr_code_data).decode()
+                        qr_code_image = ft.Image(
+                            src_base64=qr_code_base64,
+                            width=200,
+                            height=200,
+                        )
+                        dialog = ft.AlertDialog(
+                            title=ft.Text("QR Code para Pagamento Pix"),
+                            content=ft.Column([
+                                qr_code_image,
+                                ft.Text(f"Chave Pix: {pix_key}"),
+                                ft.Text(f"Valor: R$ {total_comanda:.2f}"),
+                            ], alignment=ft.MainAxisAlignment.CENTER),
+                            actions=[
+                                ft.TextButton("Fechar", on_click=lambda e: page.close_dialog())
+                            ],
+                            actions_alignment=ft.MainAxisAlignment.END,
+                        )
+                        page.dialog = dialog
+                        dialog.open = True
+                        page.update()
+                    except Exception as e:
+                        print(f"Erro ao gerar QR code Pix: {str(e)}")
+                        snack_content.controls.append(ft.Text(f"Erro ao gerar QR code Pix: {str(e)}", color=ft.Colors.RED_600))
+                else:
+                    snack_content.controls.append(ft.Text("Chave Pix não disponível.", color=ft.Colors.RED_600))
+
             page.snack_bar = ft.SnackBar(
                 content=snack_content,
-                duration=10000,  # 10 seconds for visibility
+                duration=10000,
                 width=page.width * 0.9 if page.width < 600 else 600,
                 padding=10,
+                bgcolor=ft.Colors.GREY_800,
             )
             print(f"Exibindo SnackBar com botões de recibo, open={page.snack_bar.open}")
             page.snack_bar.open = True
@@ -838,7 +938,7 @@ def show_main_interface():
                 [
                     ft.Text(
                         "Sistema de Caixa - Pagamento de Comandas",
-                        size=20 if page.width < 600 else 24,
+                        size=18 if page.width < 600 else 24,
                         weight=ft.FontWeight.BOLD,
                         text_align=ft.TextAlign.CENTER,
                     ),
@@ -857,12 +957,25 @@ def show_main_interface():
                         col={"xs": 12, "sm": 6, "md": 4},
                         controls=[
                             ft.ElevatedButton(
+                                "Adicionar Item",
+                                on_click=adicionar_item,
+                                bgcolor=ft.Colors.GREEN_400,
+                                color=ft.Colors.WHITE,
+                                width=page.width * 0.85 if page.width < 600 else 150,
+                                height=40 if page.width < 600 else 50,
+                            ),
+                        ],
+                    ),
+                    ft.Column(
+                        col={"xs": 12, "sm": 6, "md": 4},
+                        controls=[
+                            ft.ElevatedButton(
                                 "Criar Comanda",
                                 on_click=lambda e: create_comanda(),
                                 bgcolor=ft.Colors.BLUE_400,
                                 color=ft.Colors.WHITE,
-                                width=page.width * 0.9 if page.width < 600 else 150,
-                                height=50,
+                                width=page.width * 0.85 if page.width < 600 else 150,
+                                height=40 if page.width < 600 else 50,
                             ),
                         ],
                     ),
@@ -874,8 +987,8 @@ def show_main_interface():
                                 on_click=lambda e: atualizar_comandas_periodicamente(),
                                 bgcolor=ft.Colors.BLUE_400,
                                 color=ft.Colors.WHITE,
-                                width=page.width * 0.9 if page.width < 600 else 150,
-                                height=50,
+                                width=page.width * 0.85 if page.width < 600 else 150,
+                                height=40 if page.width < 600 else 50,
                             ),
                         ],
                     ),
@@ -891,28 +1004,15 @@ def show_main_interface():
                         col={"xs": 12, "sm": 6, "md": 4},
                         controls=[quantity_controls],
                     ),
-                    ft.Column(
-                        col={"xs": 12, "sm": 6, "md": 4},
-                        controls=[
-                            ft.ElevatedButton(
-                                "Adicionar Item",
-                                on_click=adicionar_item,
-                                bgcolor=ft.Colors.GREEN_400,
-                                color=ft.Colors.WHITE,
-                                width=page.width * 0.9 if page.width < 600 else 150,
-                                height=50,
-                            ),
-                        ],
-                    ),
                 ],
             ),
             ft.Container(
                 content=ft.ListView(
                     controls=[page.comanda_table],
-                    auto_scroll=False,
+                    auto_scroll=True,
                     expand=True,
                 ),
-                height=200 if page.width < 600 else 300,
+                height=page.height * 0.3 if page.width < 600 else page.height * 0.4,
                 border=ft.border.all(1, ft.Colors.GREY_400),
                 margin=ft.margin.only(top=10),
             ),
@@ -922,7 +1022,7 @@ def show_main_interface():
             ),
             ft.Text(
                 "Pagamento",
-                size=16 if page.width < 600 else 18,
+                size=14 if page.width < 600 else 18,
                 weight=ft.FontWeight.BOLD,
             ),
             ft.ResponsiveRow(
@@ -949,24 +1049,25 @@ def show_main_interface():
                         on_click=confirmar_pagamento,
                         bgcolor=ft.Colors.GREEN_400,
                         color=ft.Colors.WHITE,
-                        width=page.width * 0.9 if page.width < 600 else 200,
-                        height=50,
+                        width=page.width * 0.85 if page.width < 600 else 200,
+                        height=40 if page.width < 600 else 50,
                     ),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
             ),
         ],
         scroll=ft.ScrollMode.AUTO,
-        spacing=15,
+        spacing=10,
     )
 
     page.controls.clear()
     page.add(
         ft.Container(
             content=main_layout,
-            alignment=ft.alignment.center,
-            padding=10,
+            alignment=ft.alignment.top_center,
+            padding=ft.padding.only(left=5, right=5, top=10, bottom=10),
             width=page.width,
+            expand=True,
         )
     )
     atualizar_tabela_comanda()

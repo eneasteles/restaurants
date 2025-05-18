@@ -416,7 +416,7 @@ class CardPaymentAdmin(admin.ModelAdmin):
             valor=float(obj.amount),
             #nome_recebedor=obj.restaurant.name[:25],  # Máximo 25 caracteres
             nome_recebedor="ENEAS BEZERRA TELES",
-            cidade="Fortaleza",
+            cidade=obj.restaurant.city,  # Máximo 15 caracteres
             txid=txid
         )
 

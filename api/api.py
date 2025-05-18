@@ -38,6 +38,20 @@ def get_user_restaurant_and_role(user):
     except RestaurantUser.DoesNotExist:
         raise Exception("Usuário não associado a um restaurante")
 
+@api.get("/restaurants/{restaurant_id}")
+def get_restaurant(request, restaurant_id: int):
+    user = request.user
+    if not user.is_authenticated:
+        return api.create_response(request, {"error": "Autenticação necessária"}, status=401)
+    restaurant = get_object_or_404(Restaurant, id=restaurant_id)
+    restaurant_user = get_object_or_404(RestaurantUser, user=user, restaurant=restaurant)
+    return {
+        "id": restaurant.id,
+        "name": restaurant.name,
+        "chave_pix": restaurant.chave_pix,
+        "cidade": restaurant.city,
+    }
+
 @api.get("/user-profile", response=UserProfileSchema)
 def get_user_profile(request):
     print(f"Usuário na requisição: {request.user}, Autenticado: {request.user.is_authenticated}")
@@ -85,10 +99,8 @@ def add_card_item(request, card_id: int, payload: CardItemCreateSchema):
     card = get_object_or_404(Card, id=card_id, restaurant=restaurant)
     menu_item = get_object_or_404(MenuItem, id=payload.menu_item_id, restaurant=restaurant)
     try:
-        # Converter quantity para Decimal explicitamente
         quantity = Decimal(str(payload.quantity))
         print(f"Criando CardItem: card_id={card_id}, menu_item_id={payload.menu_item_id}, quantity={quantity}, type={type(quantity)}, price={menu_item.price}, type={type(menu_item.price)}")
-        # Verificar se MenuItem tem campo stock e seu tipo
         if hasattr(menu_item, 'stock'):
             print(f"MenuItem stock: {menu_item.stock}, type={type(menu_item.stock)}")
         card_item = CardItem.objects.create(
