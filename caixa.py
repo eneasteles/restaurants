@@ -12,7 +12,9 @@ import uuid
 import re
 
 # Global variables
-API_BASE_URL = "http://103.199.187.28:8001/api/"
+#API_BASE_URL = "http://103.199.187.28:8001/api/"
+API_BASE_URL = "http://localhost:8000/api/"
+#API_BASE_URL = "http://103.199.187.28:8001/api/"
 HEADERS = {}
 RESTAURANT_ID = None
 comandas = []
